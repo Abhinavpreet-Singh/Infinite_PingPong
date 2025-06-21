@@ -8,11 +8,13 @@ using namespace std;
 const int SCREEN_WIDTH = 1024;
 const int SCREEN_HEIGHT = 768;
 
-// Constants for the court area - using the entire screen for gameplay (no border)
-const int COURT_X = 0;
-const int COURT_Y = 0;
-const int COURT_WIDTH = SCREEN_WIDTH;    // Full screen width
-const int COURT_HEIGHT = SCREEN_HEIGHT;  // Full screen height
+// Constants for the court area - with a border
+const int COURT_BORDER_X = 5;
+const int COURT_BORDER_Y = 75;
+const int COURT_X = COURT_BORDER_X;
+const int COURT_Y = COURT_BORDER_Y;
+const int COURT_WIDTH = SCREEN_WIDTH - (2 * COURT_BORDER_X);
+const int COURT_HEIGHT = SCREEN_HEIGHT - (2 * COURT_BORDER_Y);
 
 // Structure for the paddles
 struct Paddle {
@@ -52,13 +54,14 @@ int main() {
     // Initialize game variables
     GameState currentState = MENU;
     DifficultyLevel currentDifficulty = MEDIUM;
-    // Initialize paddle properties within court boundaries    Paddle playerPaddle = {
+    // Initialize paddle properties within court boundaries
+    Paddle playerPaddle = {
         COURT_X + 20,           // x position (inside court + margin)
         SCREEN_HEIGHT / 2 - 60, // y position
         20,                     // width
         120,                    // height
         10,                     // speed
-        WHITE                   // color (changed from BLUE)
+        WHITE                   // color
     };
     
     Paddle computerPaddle = {
@@ -68,7 +71,8 @@ int main() {
         120,                         // height
         8,                           // speed (will adjust based on difficulty)
         RED                          // color
-    };      // Initialize ball properties - centered within the court
+    };
+    // Initialize ball properties - centered within the court
     Ball ball = {
         COURT_X + COURT_WIDTH / 2,  // x position (center of court)
         COURT_Y + COURT_HEIGHT / 2, // y position (center of court)
@@ -84,6 +88,19 @@ int main() {
     int playerScore = 0;
     int computerScore = 0;
     
+    // Game effects
+    Camera2D camera = { 0 };
+    camera.zoom = 1.0f;
+    float screenShake = 0.0f;
+    
+    // Ball trail effect
+    const int TRAIL_LENGTH = 15;
+    Vector2 ballTrail[TRAIL_LENGTH] = { 0 };
+    for (int i = 0; i < TRAIL_LENGTH; i++) {
+        ballTrail[i] = (Vector2){ ball.x, ball.y };
+    }
+    int trailIndex = 0;
+
     // Background elements
     const int numStars = 80;
     Vector2 stars[80];
@@ -110,6 +127,20 @@ int main() {
 
     // Main game loop
     while (!WindowShouldClose()) {
+        // Update screen shake
+        if (screenShake > 0) {
+            camera.offset.x = GetRandomValue(-screenShake, screenShake);
+            camera.offset.y = GetRandomValue(-screenShake, screenShake);
+            screenShake -= 0.5f; // Reduce shake intensity
+        } else {
+            screenShake = 0;
+            camera.offset = (Vector2){ 0, 0 };
+        }
+        
+        // Update ball trail
+        ballTrail[trailIndex] = (Vector2){ ball.x, ball.y };
+        trailIndex = (trailIndex + 1) % TRAIL_LENGTH;
+        
         switch (currentState) {
             case MENU:
                 // Check for space key press to go to difficulty selection
@@ -294,7 +325,7 @@ int main() {
                         float speedIncreaseFactor;
                         switch (currentDifficulty) {
                             case EASY:
-                                speedIncreaseFactor = -1.01f; // Very slight increase
+                                speedIncreaseFactor = -1.02f; // Slight increase over time
                                 break;
                             case MEDIUM:
                                 speedIncreaseFactor = -1.03f; // Gentle increase
@@ -333,7 +364,7 @@ int main() {
                         float speedIncreaseFactor;
                         switch (currentDifficulty) {
                             case EASY:
-                                speedIncreaseFactor = -1.01f; // Very slight increase
+                                speedIncreaseFactor = -1.02f; // Slight increase over time
                                 break;
                             case MEDIUM:
                                 speedIncreaseFactor = -1.03f; // Gentle increase
@@ -357,6 +388,7 @@ int main() {
                     }                      // Score points when ball passes paddles (using court boundaries)
                     if (ball.x - ball.radius < COURT_X) {                        // Computer scores
                         computerScore++;
+                        screenShake = 8.0f; // Trigger screen shake
                         ball.x = COURT_X + COURT_WIDTH / 2;
                         ball.y = COURT_Y + COURT_HEIGHT / 2;
                         
@@ -393,6 +425,7 @@ int main() {
                     }
                       if (ball.x + ball.radius > COURT_X + COURT_WIDTH) {                        // Player scores
                         playerScore++;
+                        screenShake = 8.0f; // Trigger screen shake
                         ball.x = COURT_X + COURT_WIDTH / 2;
                         ball.y = COURT_Y + COURT_HEIGHT / 2;
                         
@@ -497,18 +530,22 @@ int main() {
                 stars[i].x = SCREEN_WIDTH;
                 stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
             }
-        }          // Drawing
+        }
+
+        // Drawing
         BeginDrawing();
-            // Clear background with absolute black to remove any border
             ClearBackground(BLACK);
-            
-            // Force any possible border to be black
-            DrawRectangleLinesEx((Rectangle){0, 0, SCREEN_WIDTH, SCREEN_HEIGHT}, 5, BLACK);
-            
+
+            BeginMode2D(camera);
+
             // Draw starfield background
             for (int i = 0; i < numStars; i++) {
                 DrawCircle(stars[i].x, stars[i].y, 1.5f, GRAY);
-            }// Draw center line (within court boundaries)
+            }
+            // Draw court border
+            DrawRectangleLinesEx((Rectangle){COURT_X, COURT_Y, COURT_WIDTH, COURT_HEIGHT}, 2, DARKGRAY);
+            
+            // Draw center line (within court boundaries)
             float centerX = COURT_X + COURT_WIDTH / 2;
             for (int i = COURT_Y + 10; i < COURT_Y + COURT_HEIGHT - 10; i += 30) {
                 DrawRectangle(centerX - 2, i, 4, 15, DARKGRAY);
@@ -539,11 +576,20 @@ int main() {
                 case GAMEPLAY:
                 {
                     // Draw game elements
-                    DrawRectangleRounded((Rectangle){playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height}, 0.3f, 6, playerPaddle.color);
-                    DrawRectangleRounded((Rectangle){computerPaddle.x, computerPaddle.y, computerPaddle.width, computerPaddle.height}, 0.3f, 6, computerPaddle.color);
+                    DrawRectangleRec((Rectangle){playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height}, playerPaddle.color);
+                    DrawRectangleRec((Rectangle){computerPaddle.x, computerPaddle.y, computerPaddle.width, computerPaddle.height}, computerPaddle.color);
+                    
+                    // Draw ball trail
+                    for (int i = 0; i < TRAIL_LENGTH; i++) {
+                        int current = (trailIndex - 1 - i + TRAIL_LENGTH) % TRAIL_LENGTH;
+                        float alpha = 1.0f - ((float)i / TRAIL_LENGTH);
+                        DrawCircle(ballTrail[current].x, ballTrail[current].y, ball.radius, ColorAlpha(ball.color, alpha * 0.3f));
+                    }
                     
                     // Draw ball with glow effect
-                    DrawCircleGradient(ball.x, ball.y, ball.radius+4, ColorAlpha(WHITE, 0.3f), ColorAlpha(WHITE, 0.0f));                    DrawCircle(ball.x, ball.y, ball.radius, ball.color);                    // Draw scores (centered in each half of the court)
+                    DrawCircleGradient(ball.x, ball.y, ball.radius+4, ColorAlpha(WHITE, 0.3f), ColorAlpha(WHITE, 0.0f));
+                    DrawCircle(ball.x, ball.y, ball.radius, ball.color);
+                    // Draw scores (centered in each half of the court)
                     DrawText(TextFormat("%d", playerScore), COURT_X + COURT_WIDTH/4 - 15, COURT_Y + 30, 60, WHITE);
                     DrawText(TextFormat("%d", computerScore), COURT_X + COURT_WIDTH*3/4 - 15, COURT_Y + 30, 60, RED);
                     
@@ -634,12 +680,15 @@ int main() {
                     break;
             }
             
+            EndMode2D();
+            
             // Draw FPS counter
             DrawFPS(10, 10);
             
         EndDrawing();
     }
-      // Clean up resources
+
+    // Clean up resources
     if (paddleHit.frameCount > 0) UnloadSound(paddleHit);
     if (wallHit.frameCount > 0) UnloadSound(wallHit);
     if (score.frameCount > 0) UnloadSound(score);
