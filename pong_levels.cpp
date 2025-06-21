@@ -14,6 +14,7 @@ struct Paddle {
     float width, height;
     float speed;
     Color color;
+    float velocityY; // For smooth movement
 };
 
 // Structure for the ball
@@ -108,8 +109,8 @@ int main() {
     InitAudioDevice();
 
     // Initialize Paddles
-    playerPaddle = {COURT_X + 20, SCREEN_HEIGHT / 2 - 60, 20, 120, 10, WHITE};
-    computerPaddle = {COURT_X + COURT_WIDTH - 40, SCREEN_HEIGHT / 2 - 60, 20, 120, 8, RED};
+    playerPaddle = {COURT_X + 20, SCREEN_HEIGHT / 2 - 60, 20, 120, 10, WHITE, 0};
+    computerPaddle = {COURT_X + COURT_WIDTH - 40, SCREEN_HEIGHT / 2 - 60, 20, 120, 8, RED, 0};
 
     // Initialize Ball
     ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 7, 7, 15, WHITE, 1.0f, 0 };
@@ -200,19 +201,19 @@ void UpdateDrawFrame(void)
         case DIFFICULTY_SELECT:
             if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1)) {
                 currentDifficulty = EASY;
-                computerPaddle.speed = 5.0f;
+                computerPaddle.speed = 4.5f;
                 currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
             } else if (IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2)) {
                 currentDifficulty = MEDIUM;
-                computerPaddle.speed = 7.0f;
+                computerPaddle.speed = 6.0f;
                 currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
             } else if (IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_KP_3)) {
                 currentDifficulty = HARD;
-                computerPaddle.speed = 9.0f;
+                computerPaddle.speed = 7.0f;
                 currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
@@ -228,7 +229,7 @@ void UpdateDrawFrame(void)
             }
             break;
             
-        case GAMEPLAY:
+        case GAMEPLAY: {
             if (IsKeyPressed(KEY_P)) {
                 currentState = PAUSED;
             }
@@ -236,10 +237,38 @@ void UpdateDrawFrame(void)
                 currentState = MENU;
             }
 
-            if (IsKeyDown(KEY_W) && playerPaddle.y > COURT_Y) playerPaddle.y -= playerPaddle.speed;
-            if (IsKeyDown(KEY_S) && playerPaddle.y + playerPaddle.height < COURT_Y + COURT_HEIGHT) playerPaddle.y += playerPaddle.speed;
-            if (IsKeyDown(KEY_UP) && playerPaddle.y > COURT_Y) playerPaddle.y -= playerPaddle.speed;
-            if (IsKeyDown(KEY_DOWN) && playerPaddle.y + playerPaddle.height < COURT_Y + COURT_HEIGHT) playerPaddle.y += playerPaddle.speed;
+            // --- Smooth Player Paddle Control ---
+            const float acceleration = 0.7f;
+            const float friction = 0.88f;
+            const float maxVelocity = 8.0f;
+
+            // Apply acceleration based on key press
+            if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) {
+                playerPaddle.velocityY -= acceleration;
+            } else if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) {
+                playerPaddle.velocityY += acceleration;
+            } else {
+                // Apply friction when no movement keys are pressed
+                playerPaddle.velocityY *= friction;
+            }
+
+            // Clamp velocity to max speed
+            if (playerPaddle.velocityY > maxVelocity) playerPaddle.velocityY = maxVelocity;
+            if (playerPaddle.velocityY < -maxVelocity) playerPaddle.velocityY = -maxVelocity;
+
+            // Update paddle position based on velocity
+            playerPaddle.y += playerPaddle.velocityY;
+
+            // Keep paddle within court bounds and reset velocity on collision
+            if (playerPaddle.y < COURT_Y) {
+                playerPaddle.y = COURT_Y;
+                playerPaddle.velocityY = 0;
+            }
+            if (playerPaddle.y + playerPaddle.height > COURT_Y + COURT_HEIGHT) {
+                playerPaddle.y = COURT_Y + COURT_HEIGHT - playerPaddle.height;
+                playerPaddle.velocityY = 0;
+            }
+            // --- End Smooth Player Paddle Control ---
             
             // Computer AI based on difficulty
             {
@@ -256,21 +285,21 @@ void UpdateDrawFrame(void)
                 switch(currentDifficulty) {
                     case EASY:
                         aiAccuracy = 0.5f;
-                        aiReactionSpeed = 0.6f;
-                        aiDeadZone = 30.0f;
+                        aiReactionSpeed = 0.5f;
+                        aiDeadZone = 35.0f;
                         useAdvancedPrediction = false;
                         break;
                     case MEDIUM:
-                        aiAccuracy = 0.75f;
-                        aiReactionSpeed = 0.8f;
-                        aiDeadZone = 20.0f;
-                        useAdvancedPrediction = true;
+                        aiAccuracy = 0.65f;
+                        aiReactionSpeed = 0.55f;
+                        aiDeadZone = 40.0f;
+                        useAdvancedPrediction = false;
                         break;
                     case HARD:
-                        aiAccuracy = 0.9f;
-                        aiReactionSpeed = 0.9f;
-                        aiDeadZone = 10.0f;
-                        useAdvancedPrediction = true;
+                        aiAccuracy = 0.75f;
+                        aiReactionSpeed = 0.75f;
+                        aiDeadZone = 30.0f;
+                        useAdvancedPrediction = false;
                         break;
                     case IMPOSSIBLE:
                         aiAccuracy = 1.0f;
@@ -287,6 +316,11 @@ void UpdateDrawFrame(void)
                     ballTrackPosition = ball.y + ball.speedY * timeToReach;
                       // Keep the prediction within court bounds
                     if (useAdvancedPrediction) {
+                        // Add prediction error for Hard mode to make it more human
+                        if (currentDifficulty == HARD) {
+                            ballTrackPosition += GetRandomValue(-20, 20);
+                        }
+
                         // Account for ball radius when calculating bounce
                         while (ballTrackPosition - ball.radius < COURT_Y || ballTrackPosition + ball.radius > COURT_Y + COURT_HEIGHT) {
                             if (ballTrackPosition - ball.radius < COURT_Y) 
@@ -342,16 +376,16 @@ void UpdateDrawFrame(void)
                     float speedIncreaseFactor;
                     switch (currentDifficulty) {
                         case EASY:
-                            speedIncreaseFactor = -1.01f; // Very slight increase
+                            speedIncreaseFactor = -1.01f;
                             break;
                         case MEDIUM:
-                            speedIncreaseFactor = -1.03f; // Gentle increase
+                            speedIncreaseFactor = -1.02f;
                             break;
                         case HARD:
-                            speedIncreaseFactor = -1.05f; // Moderate increase
+                            speedIncreaseFactor = -1.03f;
                             break;
                         case IMPOSSIBLE:
-                            speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Aggressive increase
+                            speedIncreaseFactor = -1.06f * ball.impossibleSpeedMultiplier; // Aggressive increase
                             break;
                         default:
                             speedIncreaseFactor = -1.03f;
@@ -381,16 +415,16 @@ void UpdateDrawFrame(void)
                     float speedIncreaseFactor;
                     switch (currentDifficulty) {
                         case EASY:
-                            speedIncreaseFactor = -1.01f; // Very slight increase
+                            speedIncreaseFactor = -1.01f;
                             break;
                         case MEDIUM:
-                            speedIncreaseFactor = -1.03f; // Gentle increase
+                            speedIncreaseFactor = -1.02f;
                             break;
                         case HARD:
-                            speedIncreaseFactor = -1.05f; // Moderate increase
+                            speedIncreaseFactor = -1.03f;
                             break;
                         case IMPOSSIBLE:
-                            speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Aggressive increase
+                            speedIncreaseFactor = -1.06f * ball.impossibleSpeedMultiplier; // Aggressive increase
                             break;
                         default:
                             speedIncreaseFactor = -1.03f;
@@ -450,7 +484,8 @@ void UpdateDrawFrame(void)
                 if (ball.speedY > MAX_SPEED) ball.speedY = MAX_SPEED;
                 if (ball.speedY < -MAX_SPEED) ball.speedY = -MAX_SPEED;
             }
-            break;
+        }
+        break;
             
         case PAUSED:
             if (IsKeyPressed(KEY_P)) currentState = GAMEPLAY;
