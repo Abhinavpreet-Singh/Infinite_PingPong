@@ -8,18 +8,6 @@
 
 using namespace std;
 
-// Window dimensions
-const int SCREEN_WIDTH = 1024;
-const int SCREEN_HEIGHT = 768;
-
-// Constants for the court area - with a border
-const int COURT_BORDER_X = 5;
-const int COURT_BORDER_Y = 75;
-const int COURT_X = COURT_BORDER_X;
-const int COURT_Y = COURT_BORDER_Y;
-const int COURT_WIDTH = SCREEN_WIDTH - (2 * COURT_BORDER_X);
-const int COURT_HEIGHT = SCREEN_HEIGHT - (2 * COURT_BORDER_Y);
-
 // Structure for the paddles
 struct Paddle {
     float x, y;
@@ -58,8 +46,16 @@ enum DifficultyLevel {
 //----------------------------------------------------------------------------------
 // Global Variables Definition
 //----------------------------------------------------------------------------------
-static const int screenWidth = 1024;
-static const int screenHeight = 768;
+static const int SCREEN_WIDTH = 1024;
+static const int SCREEN_HEIGHT = 768;
+
+// Constants for the court area - with a border
+static const int COURT_BORDER_X = 5;
+static const int COURT_BORDER_Y = 75;
+static const int COURT_X = COURT_BORDER_X;
+static const int COURT_Y = COURT_BORDER_Y;
+static const int COURT_WIDTH = SCREEN_WIDTH - (2 * COURT_BORDER_X);
+static const int COURT_HEIGHT = SCREEN_HEIGHT - (2 * COURT_BORDER_Y);
 
 // Game state and difficulty
 static GameState currentState = MENU;
@@ -96,12 +92,12 @@ void UpdateDrawFrame(void);     // Update and Draw one frame
 //----------------------------------------------------------------------------------
 int main() {
     // Initialization
-    InitWindow(screenWidth, screenHeight, "Enhanced Ping Pong Game");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Enhanced Ping Pong Game");
     InitAudioDevice();
 
     // Initialize Paddles
-    playerPaddle = {COURT_X + 20, screenHeight / 2 - 60, 20, 120, 10, WHITE};
-    computerPaddle = {COURT_X + COURT_WIDTH - 40, screenHeight / 2 - 60, 20, 120, 8, RED};
+    playerPaddle = {COURT_X + 20, SCREEN_HEIGHT / 2 - 60, 20, 120, 10, WHITE};
+    computerPaddle = {COURT_X + COURT_WIDTH - 40, SCREEN_HEIGHT / 2 - 60, 20, 120, 8, RED};
 
     // Initialize Ball
     ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 7, 7, 15, WHITE, 1.0f, 0 };
@@ -110,8 +106,8 @@ int main() {
     camera.zoom = 1.0f;
     for (int i = 0; i < TRAIL_LENGTH; i++) ballTrail[i] = (Vector2){ ball.x, ball.y };
     for (int i = 0; i < numStars; i++) {
-        stars[i].x = GetRandomValue(0, screenWidth);
-        stars[i].y = GetRandomValue(0, screenHeight);
+        stars[i].x = GetRandomValue(0, SCREEN_WIDTH);
+        stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
     }
 
     // Load sounds
@@ -491,8 +487,8 @@ void UpdateDrawFrame(void)
     for (int i = 0; i < numStars; i++) {
         stars[i].x -= 0.5f;
         if (stars[i].x < 0) {
-            stars[i].x = screenWidth;
-            stars[i].y = GetRandomValue(0, screenHeight);
+            stars[i].x = SCREEN_WIDTH;
+            stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
         }
     }
     
