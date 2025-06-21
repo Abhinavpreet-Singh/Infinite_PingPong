@@ -88,6 +88,17 @@ static Sound paddleHit, wallHit, score;
 void UpdateDrawFrame(void);     // Update and Draw one frame
 void ResetBall(int direction);  // Reset ball position and speed
 
+// Ball trail activation thresholds by difficulty
+static int GetTrailThreshold() {
+    switch(currentDifficulty) {
+        case EASY: return 4;
+        case MEDIUM: return 3;
+        case HARD: return 2;
+        case IMPOSSIBLE: return 1;
+        default: return 3;
+    }
+}
+
 //----------------------------------------------------------------------------------
 // Main Entry Point
 //----------------------------------------------------------------------------------
@@ -220,6 +231,9 @@ void UpdateDrawFrame(void)
         case GAMEPLAY:
             if (IsKeyPressed(KEY_P)) {
                 currentState = PAUSED;
+            }
+            if (IsKeyPressed(KEY_M)) {
+                currentState = MENU;
             }
 
             if (IsKeyDown(KEY_W) && playerPaddle.y > COURT_Y) playerPaddle.y -= playerPaddle.speed;
@@ -445,6 +459,9 @@ void UpdateDrawFrame(void)
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
             }
+            if (IsKeyPressed(KEY_M)) {
+                currentState = MENU;
+            }
             break;
             
         case GAME_OVER:
@@ -517,10 +534,13 @@ void UpdateDrawFrame(void)
                     DrawRectangleRounded((Rectangle){playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height}, 0.8f, 10, playerPaddle.color);
                     DrawRectangleRounded((Rectangle){computerPaddle.x, computerPaddle.y, computerPaddle.width, computerPaddle.height}, 0.8f, 10, computerPaddle.color);
                     
-                    for (int i = 0; i < TRAIL_LENGTH; i++) {
-                        int current = (trailIndex - 1 - i + TRAIL_LENGTH) % TRAIL_LENGTH;
-                        float alpha = 1.0f - ((float)i / TRAIL_LENGTH);
-                        DrawCircle(ballTrail[current].x, ballTrail[current].y, ball.radius, ColorAlpha(ball.color, alpha * 0.3f));
+                    // Only show trail after enough hits
+                    if (ball.hitCounter >= GetTrailThreshold()) {
+                        for (int i = 0; i < TRAIL_LENGTH; i++) {
+                            int current = (trailIndex - 1 - i + TRAIL_LENGTH) % TRAIL_LENGTH;
+                            float alpha = 1.0f - ((float)i / TRAIL_LENGTH);
+                            DrawCircle(ballTrail[current].x, ballTrail[current].y, ball.radius, ColorAlpha(ball.color, alpha * 0.3f));
+                        }
                     }
                     
                     DrawCircleGradient(ball.x, ball.y, ball.radius+4, ColorAlpha(WHITE, 0.3f), ColorAlpha(WHITE, 0.0f));
@@ -548,11 +568,13 @@ void UpdateDrawFrame(void)
                     // State-specific drawing
                     if (currentState == GAMEPLAY) {
                         DrawText("P for Pause", SCREEN_WIDTH - MeasureText("P for Pause", 20) - 20, 10, 20, LIGHTGRAY);
+                        DrawText("M for Main Menu", SCREEN_WIDTH - MeasureText("M for Main Menu", 20) - 20, 35, 20, LIGHTGRAY);
                     } else if (currentState == PAUSED) {
                         DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorAlpha(BLACK, 0.7f));
                         DrawText("PAUSED", SCREEN_WIDTH / 2 - MeasureText("PAUSED", 60) / 2, SCREEN_HEIGHT / 3, 60, WHITE);
                         DrawText("Press P to Resume", SCREEN_WIDTH / 2 - MeasureText("Press P to Resume", 30) / 2, SCREEN_HEIGHT / 2, 30, WHITE);
                         DrawText("Press R to Restart", SCREEN_WIDTH / 2 - MeasureText("Press R to Restart", 30) / 2, SCREEN_HEIGHT / 2 + 50, 30, WHITE);
+                        DrawText("Press M for Main Menu", SCREEN_WIDTH / 2 - MeasureText("Press M for Main Menu", 30) / 2, SCREEN_HEIGHT / 2 + 100, 30, WHITE);
                     }
                 }
                     break;
