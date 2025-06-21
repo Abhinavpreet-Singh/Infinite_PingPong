@@ -1,4 +1,4 @@
-# Enhanced Ping Pong Game
+# Ping Pong Game
 
 This is a classic Ping Pong game with several enhancements, built using the C++ and the raylib library. It features multiple difficulty levels, special effects, and a dynamic scoring system.
 
