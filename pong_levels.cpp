@@ -2,6 +2,10 @@
 #include <raylib.h>
 #include <string>
 
+#if defined(PLATFORM_WEB)
+    #include <emscripten/emscripten.h>
+#endif
+
 using namespace std;
 
 // Window dimensions
@@ -39,6 +43,7 @@ enum GameState {
     MENU,
     DIFFICULTY_SELECT,
     GAMEPLAY,
+    PAUSED,
     GAME_OVER
 };
 
@@ -50,493 +55,453 @@ enum DifficultyLevel {
     IMPOSSIBLE
 };
 
-int main() {
-    // Initialize game variables
-    GameState currentState = MENU;
-    DifficultyLevel currentDifficulty = MEDIUM;
-    // Initialize paddle properties within court boundaries
-    Paddle playerPaddle = {
-        COURT_X + 20,           // x position (inside court + margin)
-        SCREEN_HEIGHT / 2 - 60, // y position
-        20,                     // width
-        120,                    // height
-        10,                     // speed
-        WHITE                   // color
-    };
-    
-    Paddle computerPaddle = {
-        COURT_X + COURT_WIDTH - 40, // x position (right edge of court - paddle width - margin)
-        SCREEN_HEIGHT / 2 - 60,     // y position
-        20,                          // width
-        120,                         // height
-        8,                           // speed (will adjust based on difficulty)
-        RED                          // color
-    };
-    // Initialize ball properties - centered within the court
-    Ball ball = {
-        COURT_X + COURT_WIDTH / 2,  // x position (center of court)
-        COURT_Y + COURT_HEIGHT / 2, // y position (center of court)
-        7,                 // speed x
-        7,                 // speed y
-        15,                // radius
-        WHITE,             // color
-        1.0f,              // impossibleSpeedMultiplier (starts at 1.0)
-        0                  // hitCounter
-    };
-    
-    // Score tracking
-    int playerScore = 0;
-    int computerScore = 0;
-    
-    // Game effects
-    Camera2D camera = { 0 };
-    camera.zoom = 1.0f;
-    float screenShake = 0.0f;
-    
-    // Ball trail effect
-    const int TRAIL_LENGTH = 15;
-    Vector2 ballTrail[TRAIL_LENGTH] = { 0 };
-    for (int i = 0; i < TRAIL_LENGTH; i++) {
-        ballTrail[i] = (Vector2){ ball.x, ball.y };
-    }
-    int trailIndex = 0;
+//----------------------------------------------------------------------------------
+// Global Variables Definition
+//----------------------------------------------------------------------------------
+static const int screenWidth = 1024;
+static const int screenHeight = 768;
 
-    // Background elements
-    const int numStars = 80;
-    Vector2 stars[80];
-    for (int i = 0; i < numStars; i++) {
-        stars[i].x = GetRandomValue(0, SCREEN_WIDTH);
-        stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
-    }
-    
-    // Initialize window
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Enhanced Ping Pong Game");
-    SetTargetFPS(60);
-      // Initialize audio
+// Game state and difficulty
+static GameState currentState = MENU;
+static DifficultyLevel currentDifficulty = MEDIUM;
+
+// Game elements
+static Paddle playerPaddle;
+static Paddle computerPaddle;
+static Ball ball;
+static Camera2D camera = { 0 };
+
+// Score and effects
+static int playerScore = 0;
+static int computerScore = 0;
+static float screenShake = 0.0f;
+
+// Trail and stars
+static const int TRAIL_LENGTH = 15;
+static Vector2 ballTrail[TRAIL_LENGTH] = { 0 };
+static int trailIndex = 0;
+static const int numStars = 80;
+static Vector2 stars[numStars];
+
+// Sounds
+static Sound paddleHit, wallHit, score;
+
+//----------------------------------------------------------------------------------
+// Module Functions Declaration
+//----------------------------------------------------------------------------------
+void UpdateDrawFrame(void);     // Update and Draw one frame
+
+//----------------------------------------------------------------------------------
+// Main Enry Point
+//----------------------------------------------------------------------------------
+int main() {
+    // Initialization
+    InitWindow(screenWidth, screenHeight, "Enhanced Ping Pong Game");
     InitAudioDevice();
-    
-    // Initialize sounds with default empty values
-    Sound paddleHit = { 0 };
-    Sound wallHit = { 0 };
-    Sound score = { 0 };
-    
-    // Try to load sounds if they exist, otherwise sounds will be silent
+
+    // Initialize Paddles
+    playerPaddle = {COURT_X + 20, screenHeight / 2 - 60, 20, 120, 10, WHITE};
+    computerPaddle = {COURT_X + COURT_WIDTH - 40, screenHeight / 2 - 60, 20, 120, 8, RED};
+
+    // Initialize Ball
+    ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 7, 7, 15, WHITE, 1.0f, 0 };
+
+    // Initialize effects and background
+    camera.zoom = 1.0f;
+    for (int i = 0; i < TRAIL_LENGTH; i++) ballTrail[i] = (Vector2){ ball.x, ball.y };
+    for (int i = 0; i < numStars; i++) {
+        stars[i].x = GetRandomValue(0, screenWidth);
+        stars[i].y = GetRandomValue(0, screenHeight);
+    }
+
+    // Load sounds
     if (FileExists("resources/paddle_hit.wav")) paddleHit = LoadSound("resources/paddle_hit.wav");
     if (FileExists("resources/wall_hit.wav")) wallHit = LoadSound("resources/wall_hit.wav"); 
     if (FileExists("resources/score.wav")) score = LoadSound("resources/score.wav");
 
+#if defined(PLATFORM_WEB)
+    emscripten_set_main_loop(UpdateDrawFrame, 0, 1);
+#else
+    SetTargetFPS(60);
     // Main game loop
     while (!WindowShouldClose()) {
-        // Update screen shake
-        if (screenShake > 0) {
-            camera.offset.x = GetRandomValue(-screenShake, screenShake);
-            camera.offset.y = GetRandomValue(-screenShake, screenShake);
-            screenShake -= 0.5f; // Reduce shake intensity
-        } else {
-            screenShake = 0;
-            camera.offset = (Vector2){ 0, 0 };
-        }
-        
-        // Update ball trail
-        ballTrail[trailIndex] = (Vector2){ ball.x, ball.y };
-        trailIndex = (trailIndex + 1) % TRAIL_LENGTH;
-        
-        switch (currentState) {
-            case MENU:
-                // Check for space key press to go to difficulty selection
-                if (IsKeyPressed(KEY_SPACE)) {
-                    currentState = DIFFICULTY_SELECT;
-                }
-                break;
+        UpdateDrawFrame();
+    }
+#endif
+
+    // De-Initialization
+    if (paddleHit.frameCount > 0) UnloadSound(paddleHit);
+    if (wallHit.frameCount > 0) UnloadSound(wallHit);
+    if (score.frameCount > 0) UnloadSound(score);
+    CloseAudioDevice();
+    CloseWindow();
+    
+    return 0;
+}
+
+void UpdateDrawFrame(void)
+{
+    // Update
+    //----------------------------------------------------------------------------------
+    // Update screen shake
+    if (screenShake > 0) {
+        camera.offset.x = GetRandomValue(-screenShake, screenShake);
+        camera.offset.y = GetRandomValue(-screenShake, screenShake);
+        screenShake -= 0.5f; // Reduce shake intensity
+    } else {
+        screenShake = 0;
+        camera.offset = (Vector2){ 0, 0 };
+    }
+    
+    // Update ball trail
+    ballTrail[trailIndex] = (Vector2){ ball.x, ball.y };
+    trailIndex = (trailIndex + 1) % TRAIL_LENGTH;
+    
+    switch (currentState) {
+        case MENU:
+            if (IsKeyPressed(KEY_SPACE)) {
+                currentState = DIFFICULTY_SELECT;
+            }
+            break;
+            
+        case DIFFICULTY_SELECT:
+            if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1)) {
+                currentDifficulty = EASY;
+                computerPaddle.speed = 5.0f;
+                currentState = GAMEPLAY;
+                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 5, 5, 15, WHITE, 1.0f, 0 };
+                playerScore = 0; computerScore = 0;
+            } else if (IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2)) {
+                currentDifficulty = MEDIUM;
+                computerPaddle.speed = 7.0f;
+                currentState = GAMEPLAY;
+                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 6, 6, 15, WHITE, 1.0f, 0 };
+                playerScore = 0; computerScore = 0;
+            } else if (IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_KP_3)) {
+                currentDifficulty = HARD;
+                computerPaddle.speed = 9.0f;
+                currentState = GAMEPLAY;
+                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 7, 7, 15, WHITE, 1.0f, 0 };
+                playerScore = 0; computerScore = 0;
+            } else if (IsKeyPressed(KEY_FOUR) || IsKeyPressed(KEY_KP_4)) {
+                currentDifficulty = IMPOSSIBLE;
+                computerPaddle.speed = 11.0f;
+                currentState = GAMEPLAY;
+                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 8, 8, 15, WHITE, 1.0f, 0 };
+                playerScore = 0; computerScore = 0;
+            }
+            else if (IsKeyPressed(KEY_BACKSPACE)) {
+                currentState = MENU;
+            }
+            break;
+            
+        case GAMEPLAY:
+            if (IsKeyPressed(KEY_P)) {
+                currentState = PAUSED;
+            }
+
+            if (IsKeyDown(KEY_W) && playerPaddle.y > COURT_Y) playerPaddle.y -= playerPaddle.speed;
+            if (IsKeyDown(KEY_S) && playerPaddle.y + playerPaddle.height < COURT_Y + COURT_HEIGHT) playerPaddle.y += playerPaddle.speed;
+            if (IsKeyDown(KEY_UP) && playerPaddle.y > COURT_Y) playerPaddle.y -= playerPaddle.speed;
+            if (IsKeyDown(KEY_DOWN) && playerPaddle.y + playerPaddle.height < COURT_Y + COURT_HEIGHT) playerPaddle.y += playerPaddle.speed;
+            
+            // Computer AI based on difficulty
+            {
+                float computerPaddleCenter = computerPaddle.y + computerPaddle.height / 2;
+                float ballTrackPosition = ball.y;
                 
-            case DIFFICULTY_SELECT:
-                // Handle difficulty selection
-                if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1)) {                    currentDifficulty = EASY;
-                    computerPaddle.speed = 5.0f;
-                    currentState = GAMEPLAY;
-                      // Reset game elements - ball positioned in center of court with slower speed for EASY
-                    ball.x = COURT_X + COURT_WIDTH / 2;
-                    ball.y = COURT_Y + COURT_HEIGHT / 2;
-                    ball.speedX = (GetRandomValue(0, 1) == 0) ? -5 : 5;  // Slower starting speed for EASY
-                    ball.speedY = (GetRandomValue(0, 1) == 0) ? -5 : 5;  // Slower starting speed for EASY
-                    ball.hitCounter = 0;
-                    ball.impossibleSpeedMultiplier = 1.0f;
-                    playerScore = 0;
-                    computerScore = 0;
-                }                else if (IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2)) {                    currentDifficulty = MEDIUM;
-                    computerPaddle.speed = 7.0f;
-                    currentState = GAMEPLAY;
-                    
-                    // Reset game elements
-                    ball.x = COURT_X + COURT_WIDTH / 2;
-                    ball.y = COURT_Y + COURT_HEIGHT / 2;
-                    ball.speedX = (GetRandomValue(0, 1) == 0) ? -6 : 6;  // Medium speed
-                    ball.speedY = (GetRandomValue(0, 1) == 0) ? -6 : 6;  // Medium speed
-                    ball.hitCounter = 0;
-                    ball.impossibleSpeedMultiplier = 1.0f;
-                    playerScore = 0;
-                    computerScore = 0;
-                }                else if (IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_KP_3)) {                    currentDifficulty = HARD;
-                    computerPaddle.speed = 9.0f;
-                    currentState = GAMEPLAY;
-                    
-                    // Reset game elements
-                    ball.x = COURT_X + COURT_WIDTH / 2;
-                    ball.y = COURT_Y + COURT_HEIGHT / 2;
-                    ball.speedX = (GetRandomValue(0, 1) == 0) ? -7 : 7;  // Fast speed
-                    ball.speedY = (GetRandomValue(0, 1) == 0) ? -7 : 7;  // Fast speed
-                    ball.hitCounter = 0;
-                    ball.impossibleSpeedMultiplier = 1.0f;
-                    playerScore = 0;
-                    computerScore = 0;
-                }                else if (IsKeyPressed(KEY_FOUR) || IsKeyPressed(KEY_KP_4)) {                    currentDifficulty = IMPOSSIBLE;
-                    computerPaddle.speed = 11.0f;
-                    currentState = GAMEPLAY;
-                    
-                    // Reset game elements
-                    ball.x = COURT_X + COURT_WIDTH / 2;
-                    ball.y = COURT_Y + COURT_HEIGHT / 2;
-                    ball.speedX = (GetRandomValue(0, 1) == 0) ? -8 : 8;  // Very fast initial speed
-                    ball.speedY = (GetRandomValue(0, 1) == 0) ? -8 : 8;  // Very fast initial speed
-                    ball.hitCounter = 0;
-                    ball.impossibleSpeedMultiplier = 1.0f;
-                    playerScore = 0;
-                    computerScore = 0;
-                }
-                else if (IsKeyPressed(KEY_BACKSPACE)) {
-                    currentState = MENU;
-                }
-                break;
+                // Adjust computer properties based on difficulty
+                float aiAccuracy; // Percentage chance of moving correctly
+                float aiReactionSpeed; // Speed multiplier
+                float aiDeadZone; // Area where paddle won't react
+                bool useAdvancedPrediction;
                 
-            case GAMEPLAY:                // Player paddle control - constrained to court boundaries
-                if (IsKeyDown(KEY_W) && playerPaddle.y > COURT_Y) {
-                    playerPaddle.y -= playerPaddle.speed;
-                }
-                if (IsKeyDown(KEY_S) && playerPaddle.y + playerPaddle.height < COURT_Y + COURT_HEIGHT) {
-                    playerPaddle.y += playerPaddle.speed;
+                // Set AI behavior based on difficulty
+                switch(currentDifficulty) {
+                    case EASY:
+                        aiAccuracy = 0.5f;
+                        aiReactionSpeed = 0.6f;
+                        aiDeadZone = 30.0f;
+                        useAdvancedPrediction = false;
+                        break;
+                    case MEDIUM:
+                        aiAccuracy = 0.75f;
+                        aiReactionSpeed = 0.8f;
+                        aiDeadZone = 20.0f;
+                        useAdvancedPrediction = true;
+                        break;
+                    case HARD:
+                        aiAccuracy = 0.9f;
+                        aiReactionSpeed = 0.9f;
+                        aiDeadZone = 10.0f;
+                        useAdvancedPrediction = true;
+                        break;
+                    case IMPOSSIBLE:
+                        aiAccuracy = 1.0f;
+                        aiReactionSpeed = 1.0f;
+                        aiDeadZone = 5.0f;
+                        useAdvancedPrediction = true;
+                        break;
                 }
                 
-                // Alternative controls (arrow keys) - constrained to court boundaries
-                if (IsKeyDown(KEY_UP) && playerPaddle.y > COURT_Y) {
-                    playerPaddle.y -= playerPaddle.speed;
-                }
-                if (IsKeyDown(KEY_DOWN) && playerPaddle.y + playerPaddle.height < COURT_Y + COURT_HEIGHT) {
-                    playerPaddle.y += playerPaddle.speed;
-                }
-                
-                // Computer AI based on difficulty
-                {
-                    float computerPaddleCenter = computerPaddle.y + computerPaddle.height / 2;
-                    float ballTrackPosition = ball.y;
-                    
-                    // Adjust computer properties based on difficulty
-                    float aiAccuracy; // Percentage chance of moving correctly
-                    float aiReactionSpeed; // Speed multiplier
-                    float aiDeadZone; // Area where paddle won't react
-                    bool useAdvancedPrediction;
-                    
-                    // Set AI behavior based on difficulty
-                    switch(currentDifficulty) {
-                        case EASY:
-                            aiAccuracy = 0.5f;
-                            aiReactionSpeed = 0.6f;
-                            aiDeadZone = 30.0f;
-                            useAdvancedPrediction = false;
-                            break;
-                        case MEDIUM:
-                            aiAccuracy = 0.75f;
-                            aiReactionSpeed = 0.8f;
-                            aiDeadZone = 20.0f;
-                            useAdvancedPrediction = true;
-                            break;
-                        case HARD:
-                            aiAccuracy = 0.9f;
-                            aiReactionSpeed = 0.9f;
-                            aiDeadZone = 10.0f;
-                            useAdvancedPrediction = true;
-                            break;
-                        case IMPOSSIBLE:
-                            aiAccuracy = 1.0f;
-                            aiReactionSpeed = 1.0f;
-                            aiDeadZone = 5.0f;
-                            useAdvancedPrediction = true;
-                            break;
-                    }
-                    
-                    // Add prediction based on difficulty
-                    if (ball.speedX > 0) {
-                        // Calculate where the ball will be when it reaches the computer's x position
-                        float timeToReach = (computerPaddle.x - ball.x) / ball.speedX;
-                        ballTrackPosition = ball.y + ball.speedY * timeToReach;
-                          // Keep the prediction within court bounds
-                        if (useAdvancedPrediction) {
-                            // Account for ball radius when calculating bounce
-                            while (ballTrackPosition - ball.radius < COURT_Y || ballTrackPosition + ball.radius > COURT_Y + COURT_HEIGHT) {
-                                if (ballTrackPosition - ball.radius < COURT_Y) 
-                                    ballTrackPosition = 2 * (COURT_Y + ball.radius) - ballTrackPosition;
-                                if (ballTrackPosition + ball.radius > COURT_Y + COURT_HEIGHT) 
-                                    ballTrackPosition = 2 * (COURT_Y + COURT_HEIGHT - ball.radius) - ballTrackPosition;
-                            }
+                // Add prediction based on difficulty
+                if (ball.speedX > 0) {
+                    // Calculate where the ball will be when it reaches the computer's x position
+                    float timeToReach = (computerPaddle.x - ball.x) / ball.speedX;
+                    ballTrackPosition = ball.y + ball.speedY * timeToReach;
+                      // Keep the prediction within court bounds
+                    if (useAdvancedPrediction) {
+                        // Account for ball radius when calculating bounce
+                        while (ballTrackPosition - ball.radius < COURT_Y || ballTrackPosition + ball.radius > COURT_Y + COURT_HEIGHT) {
+                            if (ballTrackPosition - ball.radius < COURT_Y) 
+                                ballTrackPosition = 2 * (COURT_Y + ball.radius) - ballTrackPosition;
+                            if (ballTrackPosition + ball.radius > COURT_Y + COURT_HEIGHT) 
+                                ballTrackPosition = 2 * (COURT_Y + COURT_HEIGHT - ball.radius) - ballTrackPosition;
                         }
                     }
+                }
+                
+                // Add difficulty-based movement
+                if (GetRandomValue(0, 100) < aiAccuracy * 100) {  // Chance to react based on accuracy
+                    if (computerPaddleCenter < ballTrackPosition - aiDeadZone) {
+                        computerPaddle.y += computerPaddle.speed * aiReactionSpeed;
+                    } else if (computerPaddleCenter > ballTrackPosition + aiDeadZone) {
+                        computerPaddle.y -= computerPaddle.speed * aiReactionSpeed;
+                    }
+                }                    // Keep computer paddle within court bounds
+                if (computerPaddle.y < COURT_Y) computerPaddle.y = COURT_Y;
+                if (computerPaddle.y + computerPaddle.height > COURT_Y + COURT_HEIGHT) {
+                    computerPaddle.y = COURT_Y + COURT_HEIGHT - computerPaddle.height;
+                }
+                
+                // Update ball position
+                ball.x += ball.speedX;
+                ball.y += ball.speedY;
+                  // Ball collision with top and bottom court boundaries
+                if (ball.y - ball.radius <= COURT_Y || ball.y + ball.radius >= COURT_Y + COURT_HEIGHT) {
+                    ball.speedY *= -1;
+                    // Keep ball within court after collision
+                    if (ball.y - ball.radius < COURT_Y) {
+                        ball.y = COURT_Y + ball.radius;
+                    }
+                    if (ball.y + ball.radius > COURT_Y + COURT_HEIGHT) {
+                        ball.y = COURT_Y + COURT_HEIGHT - ball.radius;
+                    }
+                    if (wallHit.frameCount > 0) PlaySound(wallHit);
+                }                        // Ball collision with player paddle
+                if (ball.x - ball.radius <= playerPaddle.x + playerPaddle.width &&
+                    ball.y >= playerPaddle.y && ball.y <= playerPaddle.y + playerPaddle.height &&
+                    ball.speedX < 0) {
                     
-                    // Add difficulty-based movement
-                    if (GetRandomValue(0, 100) < aiAccuracy * 100) {  // Chance to react based on accuracy
-                        if (computerPaddleCenter < ballTrackPosition - aiDeadZone) {
-                            computerPaddle.y += computerPaddle.speed * aiReactionSpeed;
-                        } else if (computerPaddleCenter > ballTrackPosition + aiDeadZone) {
-                            computerPaddle.y -= computerPaddle.speed * aiReactionSpeed;
-                        }
-                    }                    // Keep computer paddle within court bounds
-                    if (computerPaddle.y < COURT_Y) computerPaddle.y = COURT_Y;
-                    if (computerPaddle.y + computerPaddle.height > COURT_Y + COURT_HEIGHT) {
-                        computerPaddle.y = COURT_Y + COURT_HEIGHT - computerPaddle.height;
+                    // Track consecutive hits for IMPOSSIBLE difficulty
+                    ball.hitCounter++;
+                    
+                    // Update speed multiplier in IMPOSSIBLE mode
+                    if (currentDifficulty == IMPOSSIBLE && ball.hitCounter > 3) {
+                        ball.impossibleSpeedMultiplier += 0.08f;
+                        if (ball.impossibleSpeedMultiplier > 2.5f) ball.impossibleSpeedMultiplier = 2.5f; // Higher cap for more challenge
                     }
                     
-                    // Update ball position
-                    ball.x += ball.speedX;
-                    ball.y += ball.speedY;
-                      // Ball collision with top and bottom court boundaries
-                    if (ball.y - ball.radius <= COURT_Y || ball.y + ball.radius >= COURT_Y + COURT_HEIGHT) {
-                        ball.speedY *= -1;
-                        // Keep ball within court after collision
-                        if (ball.y - ball.radius < COURT_Y) {
-                            ball.y = COURT_Y + ball.radius;
-                        }
-                        if (ball.y + ball.radius > COURT_Y + COURT_HEIGHT) {
-                            ball.y = COURT_Y + COURT_HEIGHT - ball.radius;
-                        }
-                        if (wallHit.frameCount > 0) PlaySound(wallHit);
-                    }                        // Ball collision with player paddle
-                    if (ball.x - ball.radius <= playerPaddle.x + playerPaddle.width &&
-                        ball.y >= playerPaddle.y && ball.y <= playerPaddle.y + playerPaddle.height &&
-                        ball.speedX < 0) {
-                        
-                        // Track consecutive hits for IMPOSSIBLE difficulty
-                        ball.hitCounter++;
-                        
-                        // Update speed multiplier in IMPOSSIBLE mode
-                        if (currentDifficulty == IMPOSSIBLE && ball.hitCounter > 3) {
-                            ball.impossibleSpeedMultiplier += 0.08f;
-                            if (ball.impossibleSpeedMultiplier > 2.5f) ball.impossibleSpeedMultiplier = 2.5f; // Higher cap for more challenge
-                        }
-                        
-                        // Speed increases with each hit, adjusted per difficulty level
-                        float speedIncreaseFactor;
-                        switch (currentDifficulty) {
-                            case EASY:
-                                speedIncreaseFactor = -1.02f; // Slight increase over time
-                                break;
-                            case MEDIUM:
-                                speedIncreaseFactor = -1.03f; // Gentle increase
-                                break;
-                            case HARD:
-                                speedIncreaseFactor = -1.05f; // Moderate increase
-                                break;
-                            case IMPOSSIBLE:
-                                speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Aggressive increase
-                                break;
-                            default:
-                                speedIncreaseFactor = -1.03f;
-                        }
-                        ball.speedX *= speedIncreaseFactor;
-                        
-                        // Change Y speed based on where the ball hits the paddle
-                        float hitPosition = (ball.y - (playerPaddle.y + playerPaddle.height / 2)) / (playerPaddle.height / 2);
-                        ball.speedY = ball.speedY * 0.75f + hitPosition * 7;
-                        
-                        if (paddleHit.frameCount > 0) PlaySound(paddleHit);
-                    }                      // Ball collision with computer paddle
-                    if (ball.x + ball.radius >= computerPaddle.x &&
-                        ball.y >= computerPaddle.y && ball.y <= computerPaddle.y + computerPaddle.height &&
-                        ball.speedX > 0) {
-                        
-                        // Track consecutive hits for IMPOSSIBLE difficulty
-                        ball.hitCounter++;
-                        
-                        // Update speed multiplier in IMPOSSIBLE mode
-                        if (currentDifficulty == IMPOSSIBLE && ball.hitCounter > 3) {
-                            ball.impossibleSpeedMultiplier += 0.08f;
-                            if (ball.impossibleSpeedMultiplier > 2.5f) ball.impossibleSpeedMultiplier = 2.5f; // Higher cap for more challenge
-                        }
-                        
-                        // Speed increases with each hit, adjusted per difficulty level
-                        float speedIncreaseFactor;
-                        switch (currentDifficulty) {
-                            case EASY:
-                                speedIncreaseFactor = -1.02f; // Slight increase over time
-                                break;
-                            case MEDIUM:
-                                speedIncreaseFactor = -1.03f; // Gentle increase
-                                break;
-                            case HARD:
-                                speedIncreaseFactor = -1.05f; // Moderate increase
-                                break;
-                            case IMPOSSIBLE:
-                                speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Aggressive increase
-                                break;
-                            default:
-                                speedIncreaseFactor = -1.03f;
-                        }
-                        ball.speedX *= speedIncreaseFactor;
-                        
-                        // Change Y speed based on where the ball hits the paddle
-                        float hitPosition = (ball.y - (computerPaddle.y + computerPaddle.height / 2)) / (computerPaddle.height / 2);
-                        ball.speedY = ball.speedY * 0.75f + hitPosition * 7;
-                        
-                        if (paddleHit.frameCount > 0) PlaySound(paddleHit);
-                    }                      // Score points when ball passes paddles (using court boundaries)
-                    if (ball.x - ball.radius < COURT_X) {                        // Computer scores
-                        computerScore++;
-                        screenShake = 8.0f; // Trigger screen shake
-                        ball.x = COURT_X + COURT_WIDTH / 2;
-                        ball.y = COURT_Y + COURT_HEIGHT / 2;
-                        
-                        // Set ball speed based on difficulty
-                        switch(currentDifficulty) {
-                            case EASY:
-                                ball.speedX = 5;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -5 : 5;
-                                break;
-                            case MEDIUM:
-                                ball.speedX = 6;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -6 : 6;
-                                break;
-                            case HARD:
-                                ball.speedX = 7;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -7 : 7;
-                                break;
-                            case IMPOSSIBLE:
-                                ball.speedX = 8;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -8 : 8;
-                                break;
-                        }
-                        
-                        // Reset IMPOSSIBLE mode enhancements on score
-                        ball.hitCounter = 0;
-                        ball.impossibleSpeedMultiplier = 1.0f;
-                        
-                        if (score.frameCount > 0) PlaySound(score);
-                        
-                        // Check for game over
-                        if (computerScore >= 10) {
-                            currentState = GAME_OVER;
-                        }
-                    }
-                      if (ball.x + ball.radius > COURT_X + COURT_WIDTH) {                        // Player scores
-                        playerScore++;
-                        screenShake = 8.0f; // Trigger screen shake
-                        ball.x = COURT_X + COURT_WIDTH / 2;
-                        ball.y = COURT_Y + COURT_HEIGHT / 2;
-                        
-                        // Set ball speed based on difficulty (negative X direction)
-                        switch(currentDifficulty) {
-                            case EASY:
-                                ball.speedX = -5;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -5 : 5;
-                                break;
-                            case MEDIUM:
-                                ball.speedX = -6;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -6 : 6;
-                                break;
-                            case HARD:
-                                ball.speedX = -7;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -7 : 7;
-                                break;
-                            case IMPOSSIBLE:
-                                ball.speedX = -8;
-                                ball.speedY = (GetRandomValue(0, 1) == 0) ? -8 : 8;
-                                break;
-                        }
-                        
-                        // Reset IMPOSSIBLE mode enhancements on score
-                        ball.hitCounter = 0;
-                        ball.impossibleSpeedMultiplier = 1.0f;
-                        
-                        if (score.frameCount > 0) PlaySound(score);
-                        
-                        // Check for game over
-                        if (playerScore >= 10) {
-                            currentState = GAME_OVER;
-                        }
-                    }                    // Cap ball speed - different caps for different difficulty levels
-                    float MAX_SPEED;
+                    // Speed increases with each hit, adjusted per difficulty level
+                    float speedIncreaseFactor;
                     switch (currentDifficulty) {
                         case EASY:
-                            MAX_SPEED = 10.0f;  // Lower cap for easy mode
+                            speedIncreaseFactor = -1.02f; // Slight increase over time
                             break;
                         case MEDIUM:
-                            MAX_SPEED = 15.0f;  // Moderate cap for medium mode
+                            speedIncreaseFactor = -1.03f; // Gentle increase
                             break;
                         case HARD:
-                            MAX_SPEED = 20.0f;  // Higher cap for hard mode
+                            speedIncreaseFactor = -1.05f; // Moderate increase
                             break;
                         case IMPOSSIBLE:
-                            MAX_SPEED = 30.0f;  // No real cap for impossible mode
+                            speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Aggressive increase
                             break;
                         default:
-                            MAX_SPEED = 15.0f;
+                            speedIncreaseFactor = -1.03f;
+                    }
+                    ball.speedX *= speedIncreaseFactor;
+                    
+                    // Change Y speed based on where the ball hits the paddle
+                    float hitPosition = (ball.y - (playerPaddle.y + playerPaddle.height / 2)) / (playerPaddle.height / 2);
+                    ball.speedY = ball.speedY * 0.75f + hitPosition * 7;
+                    
+                    if (paddleHit.frameCount > 0) PlaySound(paddleHit);
+                }                      // Ball collision with computer paddle
+                if (ball.x + ball.radius >= computerPaddle.x &&
+                    ball.y >= computerPaddle.y && ball.y <= computerPaddle.y + computerPaddle.height &&
+                    ball.speedX > 0) {
+                    
+                    // Track consecutive hits for IMPOSSIBLE difficulty
+                    ball.hitCounter++;
+                    
+                    // Update speed multiplier in IMPOSSIBLE mode
+                    if (currentDifficulty == IMPOSSIBLE && ball.hitCounter > 3) {
+                        ball.impossibleSpeedMultiplier += 0.08f;
+                        if (ball.impossibleSpeedMultiplier > 2.5f) ball.impossibleSpeedMultiplier = 2.5f; // Higher cap for more challenge
                     }
                     
-                    if (ball.speedX > MAX_SPEED) ball.speedX = MAX_SPEED;
-                    if (ball.speedX < -MAX_SPEED) ball.speedX = -MAX_SPEED;
-                    if (ball.speedY > MAX_SPEED) ball.speedY = MAX_SPEED;
-                    if (ball.speedY < -MAX_SPEED) ball.speedY = -MAX_SPEED;
-                }
-                break;
-                
-            case GAME_OVER:                // Check for R key to restart with same difficulty
-                if (IsKeyPressed(KEY_R)) {
-                    currentState = GAMEPLAY;                    // Reset game elements
+                    // Speed increases with each hit, adjusted per difficulty level
+                    float speedIncreaseFactor;
+                    switch (currentDifficulty) {
+                        case EASY:
+                            speedIncreaseFactor = -1.02f; // Slight increase over time
+                            break;
+                        case MEDIUM:
+                            speedIncreaseFactor = -1.03f; // Gentle increase
+                            break;
+                        case HARD:
+                            speedIncreaseFactor = -1.05f; // Moderate increase
+                            break;
+                        case IMPOSSIBLE:
+                            speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Aggressive increase
+                            break;
+                        default:
+                            speedIncreaseFactor = -1.03f;
+                    }
+                    ball.speedX *= speedIncreaseFactor;
+                    
+                    // Change Y speed based on where the ball hits the paddle
+                    float hitPosition = (ball.y - (computerPaddle.y + computerPaddle.height / 2)) / (computerPaddle.height / 2);
+                    ball.speedY = ball.speedY * 0.75f + hitPosition * 7;
+                    
+                    if (paddleHit.frameCount > 0) PlaySound(paddleHit);
+                }                      // Score points when ball passes paddles (using court boundaries)
+                if (ball.x - ball.radius < COURT_X) {                        // Computer scores
+                    computerScore++;
+                    screenShake = 8.0f; // Trigger screen shake
                     ball.x = COURT_X + COURT_WIDTH / 2;
                     ball.y = COURT_Y + COURT_HEIGHT / 2;
                     
-                    // Set appropriate speed based on difficulty level
+                    // Set ball speed based on difficulty
                     switch(currentDifficulty) {
                         case EASY:
-                            ball.speedX = (GetRandomValue(0, 1) == 0) ? -5 : 5;
+                            ball.speedX = 5;
                             ball.speedY = (GetRandomValue(0, 1) == 0) ? -5 : 5;
                             break;
                         case MEDIUM:
-                            ball.speedX = (GetRandomValue(0, 1) == 0) ? -6 : 6;
+                            ball.speedX = 6;
                             ball.speedY = (GetRandomValue(0, 1) == 0) ? -6 : 6;
                             break;
                         case HARD:
-                            ball.speedX = (GetRandomValue(0, 1) == 0) ? -7 : 7;
+                            ball.speedX = 7;
                             ball.speedY = (GetRandomValue(0, 1) == 0) ? -7 : 7;
                             break;
                         case IMPOSSIBLE:
-                            ball.speedX = (GetRandomValue(0, 1) == 0) ? -8 : 8;
+                            ball.speedX = 8;
                             ball.speedY = (GetRandomValue(0, 1) == 0) ? -8 : 8;
                             break;
                     }
+                    
+                    // Reset IMPOSSIBLE mode enhancements on score
                     ball.hitCounter = 0;
                     ball.impossibleSpeedMultiplier = 1.0f;
                     
-                    playerScore = 0;
-                    computerScore = 0;
+                    if (score.frameCount > 0) PlaySound(score);
+                    
+                    // Check for game over
+                    if (computerScore >= 10) {
+                        currentState = GAME_OVER;
+                    }
                 }
-                // SPACE for difficulty selection
-                else if (IsKeyPressed(KEY_SPACE)) {
-                    currentState = DIFFICULTY_SELECT;
+                  if (ball.x + ball.radius > COURT_X + COURT_WIDTH) {                        // Player scores
+                    playerScore++;
+                    screenShake = 8.0f; // Trigger screen shake
+                    ball.x = COURT_X + COURT_WIDTH / 2;
+                    ball.y = COURT_Y + COURT_HEIGHT / 2;
+                    
+                    // Set ball speed based on difficulty (negative X direction)
+                    switch(currentDifficulty) {
+                        case EASY:
+                            ball.speedX = -5;
+                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -5 : 5;
+                            break;
+                        case MEDIUM:
+                            ball.speedX = -6;
+                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -6 : 6;
+                            break;
+                        case HARD:
+                            ball.speedX = -7;
+                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -7 : 7;
+                            break;
+                        case IMPOSSIBLE:
+                            ball.speedX = -8;
+                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -8 : 8;
+                            break;
+                    }
+                    
+                    // Reset IMPOSSIBLE mode enhancements on score
+                    ball.hitCounter = 0;
+                    ball.impossibleSpeedMultiplier = 1.0f;
+                    
+                    if (score.frameCount > 0) PlaySound(score);
+                    
+                    // Check for game over
+                    if (playerScore >= 10) {
+                        currentState = GAME_OVER;
+                    }
+                }                    // Cap ball speed - different caps for different difficulty levels
+                float MAX_SPEED;
+                switch (currentDifficulty) {
+                    case EASY:
+                        MAX_SPEED = 10.0f;  // Lower cap for easy mode
+                        break;
+                    case MEDIUM:
+                        MAX_SPEED = 15.0f;  // Moderate cap for medium mode
+                        break;
+                    case HARD:
+                        MAX_SPEED = 20.0f;  // Higher cap for hard mode
+                        break;
+                    case IMPOSSIBLE:
+                        MAX_SPEED = 30.0f;  // No real cap for impossible mode
+                        break;
+                    default:
+                        MAX_SPEED = 15.0f;
                 }
-                break;
-        }
-        
-        // Animation for background stars
-        for (int i = 0; i < numStars; i++) {
-            stars[i].x -= 0.5f;
-            if (stars[i].x < 0) {
-                stars[i].x = SCREEN_WIDTH;
-                stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
+                
+                if (ball.speedX > MAX_SPEED) ball.speedX = MAX_SPEED;
+                if (ball.speedX < -MAX_SPEED) ball.speedX = -MAX_SPEED;
+                if (ball.speedY > MAX_SPEED) ball.speedY = MAX_SPEED;
+                if (ball.speedY < -MAX_SPEED) ball.speedY = -MAX_SPEED;
             }
+            break;
+            
+        case PAUSED:
+            if (IsKeyPressed(KEY_P)) currentState = GAMEPLAY;
+            if (IsKeyPressed(KEY_R)) {
+                currentState = GAMEPLAY;
+                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 6, 6, 15, WHITE, 1.0f, 0 };
+                playerScore = 0; computerScore = 0;
+            }
+            break;
+            
+        case GAME_OVER:
+            if (IsKeyPressed(KEY_R)) {
+                currentState = GAMEPLAY;
+                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 6, 6, 15, WHITE, 1.0f, 0 };
+                playerScore = 0; computerScore = 0;
+            }
+            else if (IsKeyPressed(KEY_SPACE)) {
+                currentState = DIFFICULTY_SELECT;
+            }
+            break;
+    }
+
+    // Animation for background stars
+    for (int i = 0; i < numStars; i++) {
+        stars[i].x -= 0.5f;
+        if (stars[i].x < 0) {
+            stars[i].x = screenWidth;
+            stars[i].y = GetRandomValue(0, screenHeight);
         }
-
-        // Drawing
-        BeginDrawing();
-            ClearBackground(BLACK);
-
-            BeginMode2D(camera);
+    }
+    
+    //----------------------------------------------------------------------------------
+    // Draw
+    //----------------------------------------------------------------------------------
+    BeginDrawing();
+        ClearBackground(BLACK);
+        BeginMode2D(camera);
 
             // Draw starfield background
             for (int i = 0; i < numStars; i++) {
@@ -574,55 +539,48 @@ int main() {
                     break;
                     
                 case GAMEPLAY:
+                case PAUSED:
                 {
-                    // Draw game elements
+                    // Draw all common game elements
                     DrawRectangleRec((Rectangle){playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height}, playerPaddle.color);
                     DrawRectangleRec((Rectangle){computerPaddle.x, computerPaddle.y, computerPaddle.width, computerPaddle.height}, computerPaddle.color);
                     
-                    // Draw ball trail
                     for (int i = 0; i < TRAIL_LENGTH; i++) {
                         int current = (trailIndex - 1 - i + TRAIL_LENGTH) % TRAIL_LENGTH;
                         float alpha = 1.0f - ((float)i / TRAIL_LENGTH);
                         DrawCircle(ballTrail[current].x, ballTrail[current].y, ball.radius, ColorAlpha(ball.color, alpha * 0.3f));
                     }
                     
-                    // Draw ball with glow effect
                     DrawCircleGradient(ball.x, ball.y, ball.radius+4, ColorAlpha(WHITE, 0.3f), ColorAlpha(WHITE, 0.0f));
                     DrawCircle(ball.x, ball.y, ball.radius, ball.color);
-                    // Draw scores (centered in each half of the court)
                     DrawText(TextFormat("%d", playerScore), COURT_X + COURT_WIDTH/4 - 15, COURT_Y + 30, 60, WHITE);
                     DrawText(TextFormat("%d", computerScore), COURT_X + COURT_WIDTH*3/4 - 15, COURT_Y + 30, 60, RED);
                     
-                    // Draw difficulty level
-                    const char* difficultyText;
-                    Color difficultyColor;
+                    const char* difficultyText = "";
+                    Color difficultyColor = WHITE;
                     
                     switch(currentDifficulty) {
-                        case EASY:
-                            difficultyText = "EASY";
-                            difficultyColor = GREEN;
-                            break;
-                        case MEDIUM:
-                            difficultyText = "MEDIUM";
-                            difficultyColor = YELLOW;
-                            break;
-                        case HARD:
-                            difficultyText = "HARD";
-                            difficultyColor = ORANGE;
-                            break;
-                        case IMPOSSIBLE:
-                            difficultyText = "IMPOSSIBLE";
-                            difficultyColor = RED;
-                            break;
+                        case EASY: difficultyText = "EASY"; difficultyColor = GREEN; break;
+                        case MEDIUM: difficultyText = "MEDIUM"; difficultyColor = YELLOW; break;
+                        case HARD: difficultyText = "HARD"; difficultyColor = ORANGE; break;
+                        case IMPOSSIBLE: difficultyText = "IMPOSSIBLE"; difficultyColor = RED; break;
                     }
-                    
                     DrawText(difficultyText, SCREEN_WIDTH / 2 - MeasureText(difficultyText, 30) / 2, 10, 30, difficultyColor);
                     
-                    // Display speed multiplier in IMPOSSIBLE mode
                     if (currentDifficulty == IMPOSSIBLE && ball.hitCounter > 3) {
                         char speedText[50];
                         sprintf(speedText, "SPEED: %.1fX", ball.impossibleSpeedMultiplier);
                         DrawText(speedText, SCREEN_WIDTH / 2 - MeasureText(speedText, 20) / 2, COURT_Y + COURT_HEIGHT - 25, 20, RED);
+                    }
+                    
+                    // State-specific drawing
+                    if (currentState == GAMEPLAY) {
+                        DrawText("P for Pause", SCREEN_WIDTH - MeasureText("P for Pause", 20) - 20, 10, 20, LIGHTGRAY);
+                    } else if (currentState == PAUSED) {
+                        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorAlpha(BLACK, 0.7f));
+                        DrawText("PAUSED", SCREEN_WIDTH / 2 - MeasureText("PAUSED", 60) / 2, SCREEN_HEIGHT / 3, 60, WHITE);
+                        DrawText("Press P to Resume", SCREEN_WIDTH / 2 - MeasureText("Press P to Resume", 30) / 2, SCREEN_HEIGHT / 2, 30, WHITE);
+                        DrawText("Press R to Restart", SCREEN_WIDTH / 2 - MeasureText("Press R to Restart", 30) / 2, SCREEN_HEIGHT / 2 + 50, 30, WHITE);
                     }
                 }
                     break;
@@ -686,14 +644,4 @@ int main() {
             DrawFPS(10, 10);
             
         EndDrawing();
-    }
-
-    // Clean up resources
-    if (paddleHit.frameCount > 0) UnloadSound(paddleHit);
-    if (wallHit.frameCount > 0) UnloadSound(wallHit);
-    if (score.frameCount > 0) UnloadSound(score);
-    CloseAudioDevice();
-    CloseWindow();
-    
-    return 0;
 }
