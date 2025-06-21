@@ -86,9 +86,10 @@ static Sound paddleHit, wallHit, score;
 // Module Functions Declaration
 //----------------------------------------------------------------------------------
 void UpdateDrawFrame(void);     // Update and Draw one frame
+void ResetBall(int direction);  // Reset ball position and speed
 
 //----------------------------------------------------------------------------------
-// Main Enry Point
+// Main Entry Point
 //----------------------------------------------------------------------------------
 int main() {
     // Initialization
@@ -115,6 +116,8 @@ int main() {
     if (FileExists("resources/wall_hit.wav")) wallHit = LoadSound("resources/wall_hit.wav"); 
     if (FileExists("resources/score.wav")) score = LoadSound("resources/score.wav");
 
+    ResetBall(0); // Set initial ball state
+
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(UpdateDrawFrame, 0, 1);
 #else
@@ -133,6 +136,29 @@ int main() {
     CloseWindow();
     
     return 0;
+}
+
+void ResetBall(int direction) // direction: 0 = random, 1 = to player, -1 = to computer
+{
+    ball.x = (float)COURT_X + COURT_WIDTH / 2;
+    ball.y = (float)COURT_Y + COURT_HEIGHT / 2;
+    ball.hitCounter = 0;
+    ball.impossibleSpeedMultiplier = 1.0f;
+
+    float initialSpeed = 0;
+    switch(currentDifficulty) {
+        case EASY: initialSpeed = 2.5f; break;
+        case MEDIUM: initialSpeed = 4.0f; break;
+        case HARD: initialSpeed = 5.5f; break;
+        case IMPOSSIBLE: initialSpeed = 7.0f; break;
+    }
+
+    if (direction == 0) {
+        ball.speedX = (GetRandomValue(0, 1) == 0) ? -initialSpeed : initialSpeed;
+    } else {
+        ball.speedX = initialSpeed * direction;
+    }
+    ball.speedY = (GetRandomValue(0, 1) == 0) ? -initialSpeed : initialSpeed;
 }
 
 void UpdateDrawFrame(void)
@@ -165,25 +191,25 @@ void UpdateDrawFrame(void)
                 currentDifficulty = EASY;
                 computerPaddle.speed = 5.0f;
                 currentState = GAMEPLAY;
-                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 5, 5, 15, WHITE, 1.0f, 0 };
+                ResetBall(0);
                 playerScore = 0; computerScore = 0;
             } else if (IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2)) {
                 currentDifficulty = MEDIUM;
                 computerPaddle.speed = 7.0f;
                 currentState = GAMEPLAY;
-                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 6, 6, 15, WHITE, 1.0f, 0 };
+                ResetBall(0);
                 playerScore = 0; computerScore = 0;
             } else if (IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_KP_3)) {
                 currentDifficulty = HARD;
                 computerPaddle.speed = 9.0f;
                 currentState = GAMEPLAY;
-                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 7, 7, 15, WHITE, 1.0f, 0 };
+                ResetBall(0);
                 playerScore = 0; computerScore = 0;
             } else if (IsKeyPressed(KEY_FOUR) || IsKeyPressed(KEY_KP_4)) {
                 currentDifficulty = IMPOSSIBLE;
                 computerPaddle.speed = 11.0f;
                 currentState = GAMEPLAY;
-                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 8, 8, 15, WHITE, 1.0f, 0 };
+                ResetBall(0);
                 playerScore = 0; computerScore = 0;
             }
             else if (IsKeyPressed(KEY_BACKSPACE)) {
@@ -302,7 +328,7 @@ void UpdateDrawFrame(void)
                     float speedIncreaseFactor;
                     switch (currentDifficulty) {
                         case EASY:
-                            speedIncreaseFactor = -1.02f; // Slight increase over time
+                            speedIncreaseFactor = -1.01f; // Very slight increase
                             break;
                         case MEDIUM:
                             speedIncreaseFactor = -1.03f; // Gentle increase
@@ -341,7 +367,7 @@ void UpdateDrawFrame(void)
                     float speedIncreaseFactor;
                     switch (currentDifficulty) {
                         case EASY:
-                            speedIncreaseFactor = -1.02f; // Slight increase over time
+                            speedIncreaseFactor = -1.01f; // Very slight increase
                             break;
                         case MEDIUM:
                             speedIncreaseFactor = -1.03f; // Gentle increase
@@ -366,32 +392,7 @@ void UpdateDrawFrame(void)
                 if (ball.x - ball.radius < COURT_X) {                        // Computer scores
                     computerScore++;
                     screenShake = 8.0f; // Trigger screen shake
-                    ball.x = COURT_X + COURT_WIDTH / 2;
-                    ball.y = COURT_Y + COURT_HEIGHT / 2;
-                    
-                    // Set ball speed based on difficulty
-                    switch(currentDifficulty) {
-                        case EASY:
-                            ball.speedX = 5;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -5 : 5;
-                            break;
-                        case MEDIUM:
-                            ball.speedX = 6;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -6 : 6;
-                            break;
-                        case HARD:
-                            ball.speedX = 7;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -7 : 7;
-                            break;
-                        case IMPOSSIBLE:
-                            ball.speedX = 8;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -8 : 8;
-                            break;
-                    }
-                    
-                    // Reset IMPOSSIBLE mode enhancements on score
-                    ball.hitCounter = 0;
-                    ball.impossibleSpeedMultiplier = 1.0f;
+                    ResetBall(1); // Serve to player
                     
                     if (score.frameCount > 0) PlaySound(score);
                     
@@ -403,32 +404,7 @@ void UpdateDrawFrame(void)
                   if (ball.x + ball.radius > COURT_X + COURT_WIDTH) {                        // Player scores
                     playerScore++;
                     screenShake = 8.0f; // Trigger screen shake
-                    ball.x = COURT_X + COURT_WIDTH / 2;
-                    ball.y = COURT_Y + COURT_HEIGHT / 2;
-                    
-                    // Set ball speed based on difficulty (negative X direction)
-                    switch(currentDifficulty) {
-                        case EASY:
-                            ball.speedX = -5;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -5 : 5;
-                            break;
-                        case MEDIUM:
-                            ball.speedX = -6;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -6 : 6;
-                            break;
-                        case HARD:
-                            ball.speedX = -7;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -7 : 7;
-                            break;
-                        case IMPOSSIBLE:
-                            ball.speedX = -8;
-                            ball.speedY = (GetRandomValue(0, 1) == 0) ? -8 : 8;
-                            break;
-                    }
-                    
-                    // Reset IMPOSSIBLE mode enhancements on score
-                    ball.hitCounter = 0;
-                    ball.impossibleSpeedMultiplier = 1.0f;
+                    ResetBall(-1); // Serve to computer
                     
                     if (score.frameCount > 0) PlaySound(score);
                     
@@ -466,7 +442,7 @@ void UpdateDrawFrame(void)
             if (IsKeyPressed(KEY_P)) currentState = GAMEPLAY;
             if (IsKeyPressed(KEY_R)) {
                 currentState = GAMEPLAY;
-                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 6, 6, 15, WHITE, 1.0f, 0 };
+                ResetBall(0);
                 playerScore = 0; computerScore = 0;
             }
             break;
@@ -474,7 +450,7 @@ void UpdateDrawFrame(void)
         case GAME_OVER:
             if (IsKeyPressed(KEY_R)) {
                 currentState = GAMEPLAY;
-                ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 6, 6, 15, WHITE, 1.0f, 0 };
+                ResetBall(0);
                 playerScore = 0; computerScore = 0;
             }
             else if (IsKeyPressed(KEY_SPACE)) {
@@ -538,8 +514,8 @@ void UpdateDrawFrame(void)
                 case PAUSED:
                 {
                     // Draw all common game elements
-                    DrawRectangleRec((Rectangle){playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height}, playerPaddle.color);
-                    DrawRectangleRec((Rectangle){computerPaddle.x, computerPaddle.y, computerPaddle.width, computerPaddle.height}, computerPaddle.color);
+                    DrawRectangleRounded((Rectangle){playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height}, 0.8f, 10, playerPaddle.color);
+                    DrawRectangleRounded((Rectangle){computerPaddle.x, computerPaddle.y, computerPaddle.width, computerPaddle.height}, 0.8f, 10, computerPaddle.color);
                     
                     for (int i = 0; i < TRAIL_LENGTH; i++) {
                         int current = (trailIndex - 1 - i + TRAIL_LENGTH) % TRAIL_LENGTH;
