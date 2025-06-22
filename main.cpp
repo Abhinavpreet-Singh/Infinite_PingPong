@@ -31,7 +31,6 @@ struct Ball {
 
 // Game state
 enum GameState {
-    NAME_INPUT,
     MAIN_MENU,
     DIFFICULTY_SELECT,
     GAMEPLAY,
@@ -62,7 +61,7 @@ static const int COURT_WIDTH = SCREEN_WIDTH - (2 * COURT_BORDER_X);
 static const int COURT_HEIGHT = SCREEN_HEIGHT - (2 * COURT_BORDER_Y);
 
 // Game state and difficulty
-static GameState currentState = NAME_INPUT;
+static GameState currentState = MAIN_MENU;
 static DifficultyLevel currentDifficulty = MEDIUM;
 
 // Player Name
@@ -129,7 +128,7 @@ int main() {
         stars[i].x = GetRandomValue(0, SCREEN_WIDTH);
         stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
     }
-
+    
     // Load sounds
     if (FileExists("resources/paddle_hit.wav")) paddleHit = LoadSound("resources/paddle_hit.wav");
     if (FileExists("resources/wall_hit.wav")) wallHit = LoadSound("resources/wall_hit.wav"); 
@@ -199,44 +198,31 @@ void UpdateDrawFrame(void)
     trailIndex = (trailIndex + 1) % TRAIL_LENGTH;
     
     switch (currentState) {
-        case NAME_INPUT:
-            {
-                int key = GetCharPressed();
-
-                // Check if more characters have been pressed
-                while (key > 0)
-                {
-                    // NOTE: Only allow keys in range [32..125]
-                    if ((key >= 32) && (key <= 125) && (letterCount < 31))
-                    {
-                        playerName[letterCount] = (char)key;
-                        playerName[letterCount+1] = '\0'; // Add null terminator
-                        letterCount++;
-                    }
-
-                    key = GetCharPressed();  // Check next character in the queue
+        case MAIN_MENU: {
+            // Handle name input
+            int key = GetCharPressed();
+            while (key > 0) {
+                if ((key >= 32) && (key <= 125) && (letterCount < 31)) {
+                    playerName[letterCount] = (char)key;
+                    playerName[letterCount+1] = '\0';
+                    letterCount++;
                 }
-
-                if (IsKeyPressed(KEY_BACKSPACE))
-                {
-                    letterCount--;
-                    if (letterCount < 0) letterCount = 0;
-                    playerName[letterCount] = '\0';
-                }
-                
-                if (IsKeyPressed(KEY_ENTER))
-                {
-                    if (letterCount == 0) strcpy(playerName, "Player");
-                    currentState = MAIN_MENU;
+                key = GetCharPressed();
+            }
+            if (IsKeyPressed(KEY_BACKSPACE)) {
+                letterCount--;
+                if (letterCount < 0) letterCount = 0;
+                playerName[letterCount] = '\0';
+            }
+            // Play button logic
+            Rectangle playButton = { SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 60, 200, 50 };
+            if ((CheckCollisionPointRec(GetMousePosition(), playButton) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) || IsKeyPressed(KEY_ENTER)) {
+                if (letterCount > 0) {
+                    currentState = DIFFICULTY_SELECT;
                 }
             }
-            break;
-        case MAIN_MENU:
-            if (IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { // Also allow mouse click
-                 currentState = DIFFICULTY_SELECT;
-            }
-            break;
-            
+        }
+        break;
         case DIFFICULTY_SELECT:
             if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1)) {
                 currentDifficulty = EASY;
@@ -543,36 +529,36 @@ void UpdateDrawFrame(void)
                 // Allow unpausing with SPACE key as well
                 if (IsKeyPressed(KEY_SPACE)) currentState = GAMEPLAY;
             }
-            break;
+                break;
             
-        case GAME_OVER:
-            if (IsKeyPressed(KEY_R)) {
-                currentState = GAMEPLAY;
+                  case GAME_OVER:
+                if (IsKeyPressed(KEY_R)) {
+                    currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
             }
-            else if (IsKeyPressed(KEY_SPACE)) {
-                currentState = DIFFICULTY_SELECT;
-            }
-            break;
-    }
-
-    // Animation for background stars
-    for (int i = 0; i < numStars; i++) {
-        stars[i].x -= 0.5f;
-        if (stars[i].x < 0) {
-            stars[i].x = SCREEN_WIDTH;
-            stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
+                else if (IsKeyPressed(KEY_SPACE)) {
+                    currentState = DIFFICULTY_SELECT;
+                }
+                break;
         }
-    }
-    
+        
+        // Animation for background stars
+        for (int i = 0; i < numStars; i++) {
+            stars[i].x -= 0.5f;
+            if (stars[i].x < 0) {
+                stars[i].x = SCREEN_WIDTH;
+                stars[i].y = GetRandomValue(0, SCREEN_HEIGHT);
+            }
+        }
+        
     //----------------------------------------------------------------------------------
     // Draw
     //----------------------------------------------------------------------------------
-    BeginDrawing();
-        ClearBackground(BLACK);
+        BeginDrawing();
+            ClearBackground(BLACK);
         BeginMode2D(camera);
-
+            
             // Draw starfield background
             for (int i = 0; i < numStars; i++) {
                 DrawCircle(stars[i].x, stars[i].y, 1.5f, GRAY);
@@ -586,47 +572,26 @@ void UpdateDrawFrame(void)
                 DrawRectangle(centerX - 2, i, 4, 15, DARKGRAY);
             }
             
-            switch (currentState) {
-                case NAME_INPUT:
-                    {
-                        DrawText("ENTER YOUR NAME", SCREEN_WIDTH / 2 - MeasureText("ENTER YOUR NAME", 60) / 2, SCREEN_HEIGHT / 4 - 40, 60, YELLOW);
-                        
-                        // Draw fancy text box
-                        Rectangle outerBox = { SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/2 - 40, 400, 80 };
-                        DrawRectangleRounded(outerBox, 0.2f, 10, WHITE);
-                        
-                        Rectangle innerBox = { outerBox.x + 3, outerBox.y + 3, outerBox.width - 6, outerBox.height - 6 };
-                        DrawRectangleRounded(innerBox, 0.2f, 8, Fade(LIGHTGRAY, 0.7f));
-
-                        DrawText(playerName, outerBox.x + outerBox.width/2 - MeasureText(playerName, 40)/2, outerBox.y + 20, 40, MAROON);
-                        
-                        // Draw smoothly blinking cursor
-                        float cursorAlpha = (sinf(GetTime() * 10.0f) + 1.0f) / 2.0f * 0.8f + 0.2f; // Smooth pulse (0.2 to 1.0)
-                        DrawRectangle(outerBox.x + outerBox.width/2 + MeasureText(playerName, 40)/2 + 8, outerBox.y + 25, 4, 30, Fade(MAROON, cursorAlpha));
-
-                        DrawText("PRESS ENTER TO CONTINUE", SCREEN_WIDTH / 2 - MeasureText("PRESS ENTER TO CONTINUE", 20) / 2, SCREEN_HEIGHT / 2 + 80, 20, GRAY);
-                        DrawText(TextFormat("MAX CHARS: %i", 31), outerBox.x + outerBox.width - MeasureText("MAX CHARS: 31", 10) - 5, outerBox.y + outerBox.height - 15, 10, DARKGRAY);
-                    }
-                    break;
-                case MAIN_MENU:
-                    {
-                        // Draw title and instructions
-                        DrawText("PING PONG", SCREEN_WIDTH / 2 - MeasureText("PING PONG", 80) / 2, SCREEN_HEIGHT / 4, 80, YELLOW);
-                        
-                        // Draw "Play" button
-                        Rectangle playButton = { SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 200, 50 };
-                        DrawRectangleRec(playButton, ORANGE);
-                        if (CheckCollisionPointRec(GetMousePosition(), playButton))
-                        {
-                            DrawRectangleRec(playButton, GOLD);
-                        }
-                        DrawText("PLAY", playButton.x + playButton.width / 2 - MeasureText("PLAY", 30) / 2, playButton.y + 10, 30, DARKGRAY);
-                        
-                        DrawText("Press SPACE or Click PLAY to start", SCREEN_WIDTH / 2 - MeasureText("Press SPACE or Click PLAY to start", 20) / 2, SCREEN_HEIGHT / 2 + 70, 20, WHITE);
-                        DrawText("Controls: W/S or UP/DOWN to move paddle", SCREEN_WIDTH / 2 - MeasureText("Controls: W/S or UP/DOWN to move paddle", 20) / 2, SCREEN_HEIGHT * 3 / 4, 20, LIGHTGRAY);
-                    }
-                    break;
-                
+              switch (currentState) {
+                case MAIN_MENU: {
+                    // Title
+                    DrawText("PING PONG", SCREEN_WIDTH / 2 - MeasureText("PING PONG", 80) / 2, SCREEN_HEIGHT / 6, 80, YELLOW);
+                    // Name input box
+                    Rectangle nameBox = { SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/2 - 40, 400, 80 };
+                    DrawRectangleRounded(nameBox, 0.2f, 10, WHITE);
+                    Rectangle innerBox = { nameBox.x + 3, nameBox.y + 3, nameBox.width - 6, nameBox.height - 6 };
+                    DrawRectangleRounded(innerBox, 0.2f, 8, Fade(LIGHTGRAY, 0.7f));
+                    DrawText(playerName, nameBox.x + nameBox.width/2 - MeasureText(playerName, 40)/2, nameBox.y + 20, 40, MAROON);
+                    float cursorAlpha = (sinf(GetTime() * 10.0f) + 1.0f) / 2.0f * 0.8f + 0.2f;
+                    DrawRectangle(nameBox.x + nameBox.width/2 + MeasureText(playerName, 40)/2 + 8, nameBox.y + 25, 4, 30, Fade(MAROON, cursorAlpha));
+                    DrawText("Enter your name", nameBox.x + 10, nameBox.y - 25, 24, GRAY);
+                    // Play button
+                    Rectangle playButton = { SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 60, 200, 50 };
+                    bool playEnabled = (letterCount > 0);
+                    DrawRectangleRec(playButton, playEnabled ? ORANGE : DARKGRAY);
+                    DrawText("PLAY", playButton.x + playButton.width / 2 - MeasureText("PLAY", 30) / 2, playButton.y + 10, 30, playEnabled ? DARKGRAY : GRAY);
+                }
+                break;
                 case DIFFICULTY_SELECT:
                     // Draw difficulty selection screen
                     DrawText("SELECT DIFFICULTY", SCREEN_WIDTH / 2 - MeasureText("SELECT DIFFICULTY", 60) / 2, SCREEN_HEIGHT / 6, 60, YELLOW);
@@ -725,7 +690,7 @@ void UpdateDrawFrame(void)
                     const char* gameOverDiffText = "";
                     Color gameOverDiffColor;
                     
-                    switch(currentDifficulty) {
+                      switch(currentDifficulty) {
                         case EASY:
                             gameOverDiffText = "EASY";
                             gameOverDiffColor = GREEN;
@@ -760,7 +725,7 @@ void UpdateDrawFrame(void)
                         SCREEN_WIDTH / 2 - MeasureText("Press R to play again with same difficulty", 20) / 2, 
                         SCREEN_HEIGHT * 3 / 4 + 40, 20, WHITE);
                         
-                    DrawText("Press SPACE for difficulty selection", 
+                          DrawText("Press SPACE for difficulty selection", 
                         SCREEN_WIDTH / 2 - MeasureText("Press SPACE for difficulty selection", 20) / 2, 
                         SCREEN_HEIGHT * 3 / 4 + 70, 20, LIGHTGRAY);
                 }
@@ -773,4 +738,5 @@ void UpdateDrawFrame(void)
             DrawFPS(10, 10);
             
         EndDrawing();
-}
+    }
+    
