@@ -29,7 +29,8 @@ struct Ball {
 
 // Game state
 enum GameState {
-    MENU,
+    NAME_INPUT,
+    MAIN_MENU,
     DIFFICULTY_SELECT,
     GAMEPLAY,
     PAUSED,
@@ -59,8 +60,12 @@ static const int COURT_WIDTH = SCREEN_WIDTH - (2 * COURT_BORDER_X);
 static const int COURT_HEIGHT = SCREEN_HEIGHT - (2 * COURT_BORDER_Y);
 
 // Game state and difficulty
-static GameState currentState = MENU;
+static GameState currentState = NAME_INPUT;
 static DifficultyLevel currentDifficulty = MEDIUM;
+
+// Player Name
+static char playerName[32] = "Player";
+static int letterCount = 0;
 
 // Game elements
 static Paddle playerPaddle;
@@ -192,9 +197,41 @@ void UpdateDrawFrame(void)
     trailIndex = (trailIndex + 1) % TRAIL_LENGTH;
     
     switch (currentState) {
-        case MENU:
-            if (IsKeyPressed(KEY_SPACE)) {
-                currentState = DIFFICULTY_SELECT;
+        case NAME_INPUT:
+            {
+                int key = GetCharPressed();
+
+                // Check if more characters have been pressed
+                while (key > 0)
+                {
+                    // NOTE: Only allow keys in range [32..125]
+                    if ((key >= 32) && (key <= 125) && (letterCount < 31))
+                    {
+                        playerName[letterCount] = (char)key;
+                        playerName[letterCount+1] = '\0'; // Add null terminator
+                        letterCount++;
+                    }
+
+                    key = GetCharPressed();  // Check next character in the queue
+                }
+
+                if (IsKeyPressed(KEY_BACKSPACE))
+                {
+                    letterCount--;
+                    if (letterCount < 0) letterCount = 0;
+                    playerName[letterCount] = '\0';
+                }
+                
+                if (IsKeyPressed(KEY_ENTER))
+                {
+                    if (letterCount == 0) strcpy(playerName, "Player");
+                    currentState = MAIN_MENU;
+                }
+            }
+            break;
+        case MAIN_MENU:
+            if (IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { // Also allow mouse click
+                 currentState = DIFFICULTY_SELECT;
             }
             break;
             
@@ -225,7 +262,7 @@ void UpdateDrawFrame(void)
                 playerScore = 0; computerScore = 0;
             }
             else if (IsKeyPressed(KEY_BACKSPACE)) {
-                currentState = MENU;
+                currentState = MAIN_MENU;
             }
             break;
             
@@ -234,7 +271,7 @@ void UpdateDrawFrame(void)
                 currentState = PAUSED;
             }
             if (IsKeyPressed(KEY_M)) {
-                currentState = MENU;
+                currentState = MAIN_MENU;
             }
 
             // --- Smooth Player Paddle Control ---
@@ -495,7 +532,7 @@ void UpdateDrawFrame(void)
                 playerScore = 0; computerScore = 0;
             }
             if (IsKeyPressed(KEY_M)) {
-                currentState = MENU;
+                currentState = MAIN_MENU;
             }
             break;
             
@@ -541,10 +578,39 @@ void UpdateDrawFrame(void)
             }
             
             switch (currentState) {
-                case MENU:
+                case NAME_INPUT:
+                    {
+                        DrawText("ENTER YOUR NAME", SCREEN_WIDTH / 2 - MeasureText("ENTER YOUR NAME", 60) / 2, SCREEN_HEIGHT / 4 - 40, 60, YELLOW);
+                        
+                        DrawRectangle(SCREEN_WIDTH/2 - 150, SCREEN_HEIGHT/2 - 30, 300, 60, LIGHTGRAY);
+                        DrawRectangleLines(SCREEN_WIDTH/2 - 150, SCREEN_HEIGHT/2 - 30, 300, 60, DARKGRAY);
+                        
+                        DrawText(playerName, SCREEN_WIDTH/2 - MeasureText(playerName, 40)/2, SCREEN_HEIGHT/2 - 20, 40, MAROON);
+                        
+                        // Draw blinking cursor
+                        if (((int)(GetTime()*2.0f))%2 == 0)
+                        {
+                            DrawText("_", SCREEN_WIDTH/2 - 150 + 10 + MeasureText(playerName, 40), SCREEN_HEIGHT/2 - 10, 40, MAROON);
+                        }
+                        
+                        DrawText("PRESS ENTER TO CONTINUE", SCREEN_WIDTH / 2 - MeasureText("PRESS ENTER TO CONTINUE", 20) / 2, SCREEN_HEIGHT / 2 + 60, 20, GRAY);
+                        DrawText(TextFormat("CHARACTERS: %i/%i", letterCount, 31), SCREEN_WIDTH / 2 - 150, SCREEN_HEIGHT/2 + 35, 10, DARKGRAY);
+                    }
+                    break;
+                case MAIN_MENU:
                     // Draw title and instructions
                     DrawText("PING PONG", SCREEN_WIDTH / 2 - MeasureText("PING PONG", 80) / 2, SCREEN_HEIGHT / 4, 80, YELLOW);
-                    DrawText("Press SPACE to select difficulty", SCREEN_WIDTH / 2 - MeasureText("Press SPACE to select difficulty", 30) / 2, SCREEN_HEIGHT / 2, 30, WHITE);
+                    
+                    // Draw "Play" button
+                    Rectangle playButton = { SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2, 200, 50 };
+                    DrawRectangleRec(playButton, ORANGE);
+                    if (CheckCollisionPointRec(GetMousePosition(), playButton))
+                    {
+                        DrawRectangleRec(playButton, GOLD);
+                    }
+                    DrawText("PLAY", playButton.x + playButton.width / 2 - MeasureText("PLAY", 30) / 2, playButton.y + 10, 30, DARKGRAY);
+                    
+                    DrawText("Press SPACE or Click PLAY to start", SCREEN_WIDTH / 2 - MeasureText("Press SPACE or Click PLAY to start", 20) / 2, SCREEN_HEIGHT / 2 + 70, 20, WHITE);
                     DrawText("Controls: W/S or UP/DOWN to move paddle", SCREEN_WIDTH / 2 - MeasureText("Controls: W/S or UP/DOWN to move paddle", 20) / 2, SCREEN_HEIGHT * 3 / 4, 20, LIGHTGRAY);
                     break;
                 
@@ -580,7 +646,13 @@ void UpdateDrawFrame(void)
                     
                     DrawCircleGradient(ball.x, ball.y, ball.radius+4, ColorAlpha(WHITE, 0.3f), ColorAlpha(WHITE, 0.0f));
                     DrawCircle(ball.x, ball.y, ball.radius, ball.color);
+                    
+                    // Draw Player Name and Score
+                    DrawText(playerName, COURT_X + COURT_WIDTH/4 - MeasureText(playerName, 20)/2, COURT_Y + 5, 20, WHITE);
                     DrawText(TextFormat("%d", playerScore), COURT_X + COURT_WIDTH/4 - 15, COURT_Y + 30, 60, WHITE);
+
+                    // Draw Computer Score
+                    DrawText("COMPUTER", COURT_X + COURT_WIDTH*3/4 - MeasureText("COMPUTER", 20)/2, COURT_Y + 5, 20, RED);
                     DrawText(TextFormat("%d", computerScore), COURT_X + COURT_WIDTH*3/4 - 15, COURT_Y + 30, 60, RED);
                     
                     const char* difficultyText = "";
@@ -620,7 +692,7 @@ void UpdateDrawFrame(void)
                     DrawText("GAME OVER", SCREEN_WIDTH / 2 - MeasureText("GAME OVER", 60) / 2, SCREEN_HEIGHT / 4, 60, RED);
                     
                     if (playerScore > computerScore) {
-                        DrawText("YOU WIN!", SCREEN_WIDTH / 2 - MeasureText("YOU WIN!", 50) / 2, SCREEN_HEIGHT / 2 - 20, 50, GREEN);
+                        DrawText(TextFormat("%s WINS!", playerName), SCREEN_WIDTH / 2 - MeasureText(TextFormat("%s WINS!", playerName), 50) / 2, SCREEN_HEIGHT / 2 - 20, 50, GREEN);
                     } else {
                         DrawText("COMPUTER WINS!", SCREEN_WIDTH / 2 - MeasureText("COMPUTER WINS!", 50) / 2, SCREEN_HEIGHT / 2 - 20, 50, RED);
                     }
@@ -648,21 +720,25 @@ void UpdateDrawFrame(void)
                             break;
                     }
                     
+                    DrawText(TextFormat("Player: %s", playerName), 
+                        SCREEN_WIDTH / 2 - MeasureText(TextFormat("Player: %s", playerName), 20) / 2, 
+                        SCREEN_HEIGHT / 2 + 40, 20, WHITE);
+
                     DrawText(TextFormat("Difficulty: %s", gameOverDiffText),
                         SCREEN_WIDTH / 2 - MeasureText(TextFormat("Difficulty: %s", gameOverDiffText), 20) / 2, 
-                        SCREEN_HEIGHT / 2 + 40, 20, gameOverDiffColor);
+                        SCREEN_HEIGHT / 2 + 70, 20, gameOverDiffColor);
                     
                     DrawText(TextFormat("Final Score: %d - %d", playerScore, computerScore), 
                         SCREEN_WIDTH / 2 - MeasureText(TextFormat("Final Score: %d - %d", playerScore, computerScore), 30) / 2, 
-                        SCREEN_HEIGHT / 2 + 70, 30, WHITE);
+                        SCREEN_HEIGHT / 2 + 100, 30, WHITE);
                         
                     DrawText("Press R to play again with same difficulty", 
                         SCREEN_WIDTH / 2 - MeasureText("Press R to play again with same difficulty", 20) / 2, 
-                        SCREEN_HEIGHT * 3 / 4, 20, WHITE);
+                        SCREEN_HEIGHT * 3 / 4 + 40, 20, WHITE);
                         
                     DrawText("Press SPACE for difficulty selection", 
                         SCREEN_WIDTH / 2 - MeasureText("Press SPACE for difficulty selection", 20) / 2, 
-                        SCREEN_HEIGHT * 3 / 4 + 30, 20, LIGHTGRAY);
+                        SCREEN_HEIGHT * 3 / 4 + 70, 20, LIGHTGRAY);
                 }
                     break;
             }
