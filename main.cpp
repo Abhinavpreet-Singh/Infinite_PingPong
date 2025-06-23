@@ -119,9 +119,7 @@ int main() {
     computerPaddle = {COURT_X + COURT_WIDTH - 40, SCREEN_HEIGHT / 2 - 60, 20, 120, 8, RED, 0};
 
     // Initialize Ball
-    ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 7, 7, 15, WHITE, 1.0f, 0 };
-
-    // Initialize effects and background
+    ball = { (float)COURT_X + COURT_WIDTH / 2, (float)COURT_Y + COURT_HEIGHT / 2, 7, 7, 15, WHITE, 1.0f, 0 };    // Initialize effects and background
     camera.zoom = 1.0f;
     for (int i = 0; i < TRAIL_LENGTH; i++) ballTrail[i] = (Vector2){ ball.x, ball.y };
     for (int i = 0; i < numStars; i++) {
@@ -137,10 +135,10 @@ int main() {
     ResetBall(0); // Set initial ball state
 
 #if defined(PLATFORM_WEB)
-    SetTargetFPS(144);  // Explicitly set 144 FPS for web version
-    emscripten_set_main_loop(UpdateDrawFrame, 144, 1);
+    SetTargetFPS(60);  // Set to 60 FPS for web version
+    emscripten_set_main_loop(UpdateDrawFrame, 60, 1);
 #else
-    SetTargetFPS(144);
+    SetTargetFPS(60);  // Set to consistent 60 FPS for smoother gameplay
     // Main game loop
     while (!WindowShouldClose()) {
         UpdateDrawFrame();
@@ -162,14 +160,12 @@ void ResetBall(int direction) // direction: 0 = random, 1 = to player, -1 = to c
     ball.x = (float)COURT_X + COURT_WIDTH / 2;
     ball.y = (float)COURT_Y + COURT_HEIGHT / 2;
     ball.hitCounter = 0;
-    ball.impossibleSpeedMultiplier = 1.0f;
-
-    float initialSpeed = 0;
+    ball.impossibleSpeedMultiplier = 1.0f;    float initialSpeed = 0;
     switch(currentDifficulty) {
-        case EASY: initialSpeed = 2.5f; break;
-        case MEDIUM: initialSpeed = 4.0f; break;
-        case HARD: initialSpeed = 5.5f; break;
-        case IMPOSSIBLE: initialSpeed = 7.0f; break;
+        case EASY: initialSpeed = 7.0f; break;     // Reduced for more manageable gameplay
+        case MEDIUM: initialSpeed = 10.0f; break;  // Adjusted for proper medium challenge
+        case HARD: initialSpeed = 14.0f; break;    // Adjusted for better game feel
+        case IMPOSSIBLE: initialSpeed = 18.0f; break;  // Still challenging but more reasonable
     }
 
     if (direction == 0) {
@@ -181,9 +177,13 @@ void ResetBall(int direction) // direction: 0 = random, 1 = to player, -1 = to c
 }
 
 void UpdateDrawFrame(void)
-{
-    // Update
+{    // Update
     //----------------------------------------------------------------------------------
+    // Check if window lost focus and automatically pause the game
+    if (currentState == GAMEPLAY && !IsWindowFocused()) {
+        currentState = PAUSED;
+    }
+    
     // Update screen shake
     if (screenShake > 0) {
         camera.offset.x = GetRandomValue(-screenShake, screenShake);
@@ -223,29 +223,48 @@ void UpdateDrawFrame(void)
                 }
             }
             break;
-        }
-        case DIFFICULTY_SELECT: {
-            if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1)) {
+        }        case DIFFICULTY_SELECT: {
+            // Define button rectangles for collision detection
+            Rectangle easyButton = { SCREEN_WIDTH/2 - 200, 180, 400, 75 };
+            Rectangle mediumButton = { SCREEN_WIDTH/2 - 200, 180 + 100, 400, 75 };
+            Rectangle hardButton = { SCREEN_WIDTH/2 - 200, 180 + 200, 400, 75 };
+            Rectangle impossibleButton = { SCREEN_WIDTH/2 - 200, 180 + 300, 400, 75 };
+              // Track mouse position and clicks
+            Vector2 mousePos = GetMousePosition();
+            bool mouseClicked = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+            bool mousePressed = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+            
+            // Use either pressed or released for better click reliability
+            bool mouseAction = mouseClicked || mousePressed;
+              // Check both keyboard and mouse selection for Easy difficulty
+            if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1) || 
+                (mouseAction && CheckCollisionPointRec(mousePos, easyButton))) {
                 currentDifficulty = EASY;
-                computerPaddle.speed = 4.5f;
+                computerPaddle.speed = 8.5f;  // Adjusted for better game feel
                 currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
-            } else if (IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2)) {
+            }            // Check both keyboard and mouse selection for Medium difficulty
+            else if (IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2) || 
+                     (mouseAction && CheckCollisionPointRec(mousePos, mediumButton))) {
                 currentDifficulty = MEDIUM;
-                computerPaddle.speed = 6.0f;
+                computerPaddle.speed = 12.0f;  // Adjusted for proper medium challenge
                 currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
-            } else if (IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_KP_3)) {
+            }            // Check both keyboard and mouse selection for Hard difficulty
+            else if (IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_KP_3) || 
+                     (mouseAction && CheckCollisionPointRec(mousePos, hardButton))) {
                 currentDifficulty = HARD;
-                computerPaddle.speed = 7.0f;
+                computerPaddle.speed = 15.0f;  // Significantly increased for a proper Hard challenge
                 currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
-            } else if (IsKeyPressed(KEY_FOUR) || IsKeyPressed(KEY_KP_4)) {
+            }            // Check both keyboard and mouse selection for Impossible difficulty
+            else if (IsKeyPressed(KEY_FOUR) || IsKeyPressed(KEY_KP_4) || 
+                     (mouseAction && CheckCollisionPointRec(mousePos, impossibleButton))) {
                 currentDifficulty = IMPOSSIBLE;
-                computerPaddle.speed = 11.0f;
+                computerPaddle.speed = 24.0f;  // Drastically increased for a truly impossible challenge
                 currentState = GAMEPLAY;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
@@ -260,28 +279,53 @@ void UpdateDrawFrame(void)
                 currentState = PAUSED;
             }
             if (IsKeyPressed(KEY_M)) {
-                currentState = MAIN_MENU;
-            }
-
-            // --- Smooth Player Paddle Control ---
-            const float acceleration = 0.7f;
-            const float friction = 0.88f;
-            const float maxVelocity = 8.0f;
-
-            // Apply acceleration based on key press
+                currentState = MAIN_MENU;            }            // --- Perfect Arcade Feel Player Paddle Control ---
+            const float acceleration = 7.0f;  // Very high acceleration for instant response
+            const float friction = 0.5f;      // Lower friction for precise control and faster stops
+            const float maxVelocity = 22.0f;  // Higher max velocity for lightning-fast movement
+            const float directionChangeBoost = 1.5f; // Extra boost when changing directions
+            
+            // Apply acceleration based on key press for extremely responsive control
             if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) {
-                playerPaddle.velocityY -= acceleration;
+                // Instant direction change with extra boost for arcade-perfect feel
+                if (playerPaddle.velocityY > 0) {
+                    playerPaddle.velocityY = -acceleration * directionChangeBoost; // Boosted immediate direction change
+                } else {
+                    playerPaddle.velocityY -= acceleration; // Direct acceleration for responsive control
+                }
+                
+                // Immediate boost to high speed for arcade feel
+                if (fabs(playerPaddle.velocityY) < maxVelocity * 0.5f) {
+                    playerPaddle.velocityY = -maxVelocity * 0.7f; // Quick ramp-up to 70% of max speed
+                }
             } else if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) {
-                playerPaddle.velocityY += acceleration;
+                // Instant direction change with extra boost for arcade-perfect feel
+                if (playerPaddle.velocityY < 0) {
+                    playerPaddle.velocityY = acceleration * directionChangeBoost; // Boosted immediate direction change
+                } else {
+                    playerPaddle.velocityY += acceleration; // Direct acceleration for responsive control
+                }
+                
+                // Immediate boost to high speed for arcade feel
+                if (fabs(playerPaddle.velocityY) < maxVelocity * 0.5f) {
+                    playerPaddle.velocityY = maxVelocity * 0.7f; // Quick ramp-up to 70% of max speed
+                }
             } else {
-                // Apply friction when no movement keys are pressed
-                playerPaddle.velocityY *= friction;
+                // Apply stronger friction for crisp stops - arcade machines stop quickly
+                if (fabs(playerPaddle.velocityY) > 0.5f) {
+                    playerPaddle.velocityY *= friction;
+                } else {
+                    playerPaddle.velocityY = 0; // Complete stop when near zero for crisp feel
+                }
             }
 
             // Clamp velocity to max speed
             if (playerPaddle.velocityY > maxVelocity) playerPaddle.velocityY = maxVelocity;
             if (playerPaddle.velocityY < -maxVelocity) playerPaddle.velocityY = -maxVelocity;
-
+            
+            // Apply an aggressive deadzone to prevent tiny drifting movements
+            if (fabs(playerPaddle.velocityY) < 0.3f) playerPaddle.velocityY = 0;
+            
             // Update paddle position based on velocity
             playerPaddle.y += playerPaddle.velocityY;
 
@@ -384,7 +428,7 @@ void UpdateDrawFrame(void)
                         ball.y = COURT_Y + COURT_HEIGHT - ball.radius;
                     }
                     if (wallHit.frameCount > 0) PlaySound(wallHit);
-                }                        // Ball collision with player paddle
+                }                // Ball collision with player paddle
                 if (ball.x - ball.radius <= playerPaddle.x + playerPaddle.width &&
                     ball.y >= playerPaddle.y && ball.y <= playerPaddle.y + playerPaddle.height &&
                     ball.speedX < 0) {
@@ -394,36 +438,36 @@ void UpdateDrawFrame(void)
                     
                     // Update speed multiplier in IMPOSSIBLE mode
                     if (currentDifficulty == IMPOSSIBLE && ball.hitCounter > 3) {
-                        ball.impossibleSpeedMultiplier += 0.08f;
-                        if (ball.impossibleSpeedMultiplier > 2.5f) ball.impossibleSpeedMultiplier = 2.5f; // Higher cap for more challenge
+                        ball.impossibleSpeedMultiplier += 0.05f; // Reduced from 0.08f for more gradual increase
+                        if (ball.impossibleSpeedMultiplier > 2.0f) ball.impossibleSpeedMultiplier = 2.0f; // Lower cap for more manageable gameplay
                     }
                     
                     // Speed increases with each hit, adjusted per difficulty level
                     float speedIncreaseFactor;
                     switch (currentDifficulty) {
                         case EASY:
-                            speedIncreaseFactor = -1.01f;
+                            speedIncreaseFactor = -1.02f; // Increased from -1.01f for better gameplay at 60 FPS
                             break;
                         case MEDIUM:
-                            speedIncreaseFactor = -1.02f;
+                            speedIncreaseFactor = -1.04f; // Increased from -1.02f for better gameplay at 60 FPS
                             break;
                         case HARD:
-                            speedIncreaseFactor = -1.03f;
+                            speedIncreaseFactor = -1.06f; // Increased from -1.03f for better gameplay at 60 FPS
                             break;
                         case IMPOSSIBLE:
-                            speedIncreaseFactor = -1.06f * ball.impossibleSpeedMultiplier; // Aggressive increase
+                            speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Increased from -1.06f for better gameplay at 60 FPS
                             break;
                         default:
-                            speedIncreaseFactor = -1.03f;
-                    }
-                    ball.speedX *= speedIncreaseFactor;
+                            speedIncreaseFactor = -1.05f; // Increased from -1.03f for better gameplay at 60 FPS
+                    }                    ball.speedX *= speedIncreaseFactor;                    
                     
-                    // Change Y speed based on where the ball hits the paddle
+                    // Change Y speed based on where the ball hits the paddle                    
                     float hitPosition = (ball.y - (playerPaddle.y + playerPaddle.height / 2)) / (playerPaddle.height / 2);
-                    ball.speedY = ball.speedY * 0.75f + hitPosition * 7;
+                    ball.speedY = ball.speedY * 0.7f + hitPosition * 10; // Reduced for less aggressive angle changes
                     
-                    if (paddleHit.frameCount > 0) PlaySound(paddleHit);
-                }                      // Ball collision with computer paddle
+                    if (paddleHit.frameCount > 0) PlaySound(paddleHit);                }                
+                
+                // Ball collision with computer paddle                
                 if (ball.x + ball.radius >= computerPaddle.x &&
                     ball.y >= computerPaddle.y && ball.y <= computerPaddle.y + computerPaddle.height &&
                     ball.speedX > 0) {
@@ -433,33 +477,32 @@ void UpdateDrawFrame(void)
                     
                     // Update speed multiplier in IMPOSSIBLE mode
                     if (currentDifficulty == IMPOSSIBLE && ball.hitCounter > 3) {
-                        ball.impossibleSpeedMultiplier += 0.08f;
-                        if (ball.impossibleSpeedMultiplier > 2.5f) ball.impossibleSpeedMultiplier = 2.5f; // Higher cap for more challenge
+                        ball.impossibleSpeedMultiplier += 0.05f; // Reduced from 0.08f for more gradual increase
+                        if (ball.impossibleSpeedMultiplier > 2.0f) ball.impossibleSpeedMultiplier = 2.0f; // Lower cap for more manageable gameplay
                     }
                     
                     // Speed increases with each hit, adjusted per difficulty level
                     float speedIncreaseFactor;
                     switch (currentDifficulty) {
                         case EASY:
-                            speedIncreaseFactor = -1.01f;
+                            speedIncreaseFactor = -1.02f; // Increased from -1.01f for better gameplay at 60 FPS
                             break;
                         case MEDIUM:
-                            speedIncreaseFactor = -1.02f;
+                            speedIncreaseFactor = -1.04f; // Increased from -1.02f for better gameplay at 60 FPS
                             break;
                         case HARD:
-                            speedIncreaseFactor = -1.03f;
+                            speedIncreaseFactor = -1.06f; // Increased from -1.03f for better gameplay at 60 FPS
                             break;
                         case IMPOSSIBLE:
-                            speedIncreaseFactor = -1.06f * ball.impossibleSpeedMultiplier; // Aggressive increase
+                            speedIncreaseFactor = -1.08f * ball.impossibleSpeedMultiplier; // Increased from -1.06f for better gameplay at 60 FPS
                             break;
                         default:
-                            speedIncreaseFactor = -1.03f;
-                    }
-                    ball.speedX *= speedIncreaseFactor;
+                            speedIncreaseFactor = -1.05f; // Increased from -1.03f for better gameplay at 60 FPS
+                    }                    ball.speedX *= speedIncreaseFactor;                    
                     
-                    // Change Y speed based on where the ball hits the paddle
+                    // Change Y speed based on where the ball hits the paddle                    
                     float hitPosition = (ball.y - (computerPaddle.y + computerPaddle.height / 2)) / (computerPaddle.height / 2);
-                    ball.speedY = ball.speedY * 0.75f + hitPosition * 7;
+                    ball.speedY = ball.speedY * 0.7f + hitPosition * 10; // Reduced for less aggressive angle changes
                     
                     if (paddleHit.frameCount > 0) PlaySound(paddleHit);
                 }                      // Score points when ball passes paddles (using court boundaries)
@@ -486,23 +529,19 @@ void UpdateDrawFrame(void)
                     if (playerScore >= 10) {
                         currentState = GAME_OVER;
                     }
-                }                    // Cap ball speed - different caps for different difficulty levels
+                }                // Cap ball speed - different caps for different difficulty levels
                 float MAX_SPEED;
-                switch (currentDifficulty) {
-                    case EASY:
-                        MAX_SPEED = 10.0f;  // Lower cap for easy mode
-                        break;
-                    case MEDIUM:
-                        MAX_SPEED = 15.0f;  // Moderate cap for medium mode
-                        break;
-                    case HARD:
-                        MAX_SPEED = 20.0f;  // Higher cap for hard mode
-                        break;
-                    case IMPOSSIBLE:
-                        MAX_SPEED = 30.0f;  // No real cap for impossible mode
+                switch (currentDifficulty) {                        case EASY:
+                        MAX_SPEED = 18.0f;  // Reduced for more controllable gameplay
+                        break;                        case MEDIUM:
+                        MAX_SPEED = 24.0f;  // Reduced for more controllable gameplay
+                        break;                        case HARD:
+                        MAX_SPEED = 32.0f;  // Reduced for more controllable gameplay
+                        break;                        case IMPOSSIBLE:
+                        MAX_SPEED = 45.0f;  // Reduced but still very challenging
                         break;
                     default:
-                        MAX_SPEED = 15.0f;
+                        MAX_SPEED = 22.0f;  // Reduced for more controllable gameplay
                 }
                 
                 if (ball.speedX > MAX_SPEED) ball.speedX = MAX_SPEED;
@@ -511,18 +550,37 @@ void UpdateDrawFrame(void)
                 if (ball.speedY < -MAX_SPEED) ball.speedY = -MAX_SPEED;
             }
             break;
-        }
-        case PAUSED: {
+        }        case PAUSED: {
             // Define button rectangles
-            Rectangle resumeButton = { SCREEN_WIDTH / 2 - 125, SCREEN_HEIGHT / 2 - 50, 250, 50 };
-            Rectangle menuButton = { SCREEN_WIDTH / 2 - 125, SCREEN_HEIGHT / 2 + 20, 250, 50 };
+            Rectangle resumeButton = { SCREEN_WIDTH/2 - 170, 410, 340, 65 };
+            Rectangle menuButton = { SCREEN_WIDTH/2 - 170, 495, 340, 65 };
 
-            // Check for button clicks
-            if (CheckCollisionPointRec(GetMousePosition(), resumeButton) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                currentState = GAMEPLAY;
+            // Check for button clicks - only respond when released within the same button
+            Vector2 mousePos = GetMousePosition();
+            static bool wasPressingResume = false;
+            static bool wasPressingMenu = false;
+            
+            bool isOverResume = CheckCollisionPointRec(mousePos, resumeButton);
+            bool isOverMenu = CheckCollisionPointRec(mousePos, menuButton);
+            
+            // Track when mouse is pressed on each button
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                if (isOverResume) wasPressingResume = true;
+                if (isOverMenu) wasPressingMenu = true;
             }
-            if (CheckCollisionPointRec(GetMousePosition(), menuButton) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                currentState = MAIN_MENU;
+            
+            // Only trigger action when released on the same button
+            if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+                if (isOverResume && wasPressingResume) {
+                    currentState = GAMEPLAY;
+                }
+                if (isOverMenu && wasPressingMenu) {
+                    currentState = MAIN_MENU;
+                }
+                
+                // Reset flags
+                wasPressingResume = false;
+                wasPressingMenu = false;
             }
             
             // Allow unpausing with SPACE key as well
@@ -571,39 +629,254 @@ void UpdateDrawFrame(void)
             DrawRectangle(centerX - 2, i, 4, 15, DARKGRAY);
         }
         
-        switch (currentState) {
-            case MAIN_MENU: {
-                // Title
-                DrawText("PING PONG", SCREEN_WIDTH / 2 - MeasureText("PING PONG", 80) / 2, SCREEN_HEIGHT / 6, 80, YELLOW);
-                // Name input box
-                Rectangle nameBox = { SCREEN_WIDTH/2 - 200, SCREEN_HEIGHT/2 - 40, 400, 80 };
-                DrawRectangleRounded(nameBox, 0.2f, 10, WHITE);
-                Rectangle innerBox = { nameBox.x + 3, nameBox.y + 3, nameBox.width - 6, nameBox.height - 6 };
-                DrawRectangleRounded(innerBox, 0.2f, 8, Fade(LIGHTGRAY, 0.7f));
-                DrawText(playerName, nameBox.x + nameBox.width/2 - MeasureText(playerName, 40)/2, nameBox.y + 20, 40, MAROON);
-                float cursorAlpha = (sinf(GetTime() * 10.0f) + 1.0f) / 2.0f * 0.8f + 0.2f;
-                DrawRectangle(nameBox.x + nameBox.width/2 + MeasureText(playerName, 40)/2 + 8, nameBox.y + 25, 4, 30, Fade(MAROON, cursorAlpha));
-                DrawText("Enter your name", nameBox.x + 10, nameBox.y - 25, 24, GRAY);
-                // Play button
-                Rectangle playButton = { SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 + 60, 200, 50 };
+        switch (currentState) {            case MAIN_MENU: {
+                // Background effect: animated stars with color variations
+                for (int i = 0; i < numStars; i++) {
+                    float starSize = (i % 4 == 0) ? 3.0f : ((i % 3 == 0) ? 2.0f : 1.2f);
+                    Color starColor = (i % 5 == 0) ? YELLOW : ((i % 7 == 0) ? SKYBLUE : WHITE);
+                    DrawCircle(stars[i].x, stars[i].y, starSize, ColorAlpha(starColor, 0.7f + 0.3f * sinf(GetTime() * 2 + i)));
+                }
+                
+                // Semi-transparent overlay gradient for better readability
+                DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
+                                     ColorAlpha(BLACK, 0.8f), ColorAlpha(DARKBLUE, 0.5f));
+                
+                // Draw dynamic retro-style title
+                const char* title = "PING PONG";
+                int titleSize = 105;
+                float bounceHeight = 5.0f * sinf(GetTime() * 3.0f); // Subtle bounce effect
+                int titleWidth = MeasureText(title, titleSize);
+                
+                // Draw colorful title with glowing effect and shadow
+                DrawText(title, SCREEN_WIDTH/2 - titleWidth/2 - 3, 120 + 3, titleSize, BLACK); // Shadow
+                
+                // Main title with glow effect
+                Color titleColor = ColorFromHSV(fmodf(GetTime() * 20, 360.0f), 0.7f, 1.0f); // Slow color cycle
+                DrawText(title, SCREEN_WIDTH/2 - titleWidth/2, 120 + bounceHeight, titleSize, titleColor);
+                
+                // Subtitle with glow effect
+                DrawText("ARCADE EDITION", 
+                    SCREEN_WIDTH/2 - MeasureText("ARCADE EDITION", 32)/2, 
+                    230, 
+                    32, ORANGE);
+                
+                // Dynamic underline
+                DrawLineEx(
+                    (Vector2){SCREEN_WIDTH/2 - 180, 270},
+                    (Vector2){SCREEN_WIDTH/2 + 180, 270},
+                    3.0f, WHITE);
+                
+                // Name label with better styling
+                DrawText("ENTER YOUR NAME:", 
+                    SCREEN_WIDTH/2 - MeasureText("ENTER YOUR NAME:", 24)/2, 
+                    290, 
+                    24, WHITE);
+                
+                // Name input box with better visual style
+                Rectangle nameBox = { SCREEN_WIDTH/2 - 200, 320, 400, 60 };
+                DrawRectangleGradientH(nameBox.x, nameBox.y, nameBox.width, nameBox.height, 
+                                     ColorAlpha(DARKBLUE, 0.7f), ColorAlpha(DARKPURPLE, 0.7f));
+                DrawRectangleLines(nameBox.x, nameBox.y, nameBox.width, nameBox.height, WHITE);
+                
+                // Player name with better readability
+                DrawText(playerName, 
+                    nameBox.x + 20, 
+                    nameBox.y + nameBox.height/2 - 15, 
+                    40, WHITE);
+                
+                // Animated text cursor
+                if ((int)(GetTime() * 2) % 2 == 0) {
+                    DrawRectangle(
+                        nameBox.x + 20 + MeasureText(playerName, 40), 
+                        nameBox.y + 15, 
+                        3, 30, 
+                        ColorFromHSV(fmodf(GetTime() * 50, 360.0f), 0.8f, 1.0f));
+                }
+                
+                // Better play button with glow effect
+                Rectangle playButton = { SCREEN_WIDTH/2 - 150, 410, 300, 70 };
                 bool playEnabled = (letterCount > 0);
-                DrawRectangleRec(playButton, playEnabled ? ORANGE : DARKGRAY);
-                DrawText("PLAY", playButton.x + playButton.width / 2 - MeasureText("PLAY", 30) / 2, playButton.y + 10, 30, playEnabled ? DARKGRAY : GRAY);
+                
+                // Button with better hover effects
+                bool playHover = playEnabled && CheckCollisionPointRec(GetMousePosition(), playButton);
+                bool playPressed = playHover && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+                
+                // Button style based on state
+                Color buttonGradStart, buttonGradEnd;
+                if (!playEnabled) {
+                    buttonGradStart = ColorAlpha(DARKGRAY, 0.7f);
+                    buttonGradEnd = ColorAlpha(GRAY, 0.6f);
+                } else if (playPressed) {
+                    buttonGradStart = ColorAlpha(ORANGE, 0.9f);
+                    buttonGradEnd = ColorAlpha(RED, 0.9f);
+                } else if (playHover) {
+                    buttonGradStart = ColorAlpha(GOLD, 0.9f);
+                    buttonGradEnd = ColorAlpha(ORANGE, 0.9f);
+                } else {
+                    buttonGradStart = ColorAlpha(ORANGE, 0.8f);
+                    buttonGradEnd = ColorAlpha(RED, 0.8f);
+                }
+                
+                DrawRectangleGradientV(playButton.x, playButton.y, playButton.width, playButton.height, 
+                                     buttonGradStart, buttonGradEnd);
+                DrawRectangleLines(playButton.x, playButton.y, playButton.width, playButton.height, WHITE);
+                
+                // Animated button text
+                Color textColor = playEnabled ? WHITE : DARKGRAY;
+                float textScale = playPressed ? 0.95f : (playHover ? 1.05f : 1.0f);
+                int fontSize = 40 * textScale;
+                
+                DrawText("PLAY", 
+                    playButton.x + playButton.width/2 - MeasureText("PLAY", fontSize)/2, 
+                    playButton.y + playButton.height/2 - fontSize/2, 
+                    fontSize, textColor);
+                
+                // Better keyboard hint with pulse effect
+                if (playEnabled) {
+                    float alpha = 0.5f + 0.5f * sinf(GetTime() * 4);
+                    DrawText("Press ENTER to start", 
+                        SCREEN_WIDTH/2 - MeasureText("Press ENTER to start", 22)/2, 
+                        500, 
+                        22, ColorAlpha(WHITE, alpha));
+                }
             }
             break;
-            case DIFFICULTY_SELECT:
-                // Draw difficulty selection screen
-                DrawText("SELECT DIFFICULTY", SCREEN_WIDTH / 2 - MeasureText("SELECT DIFFICULTY", 60) / 2, SCREEN_HEIGHT / 6, 60, YELLOW);
+              case DIFFICULTY_SELECT: {
+                // Background effect: animated stars with color variations
+                for (int i = 0; i < numStars; i++) {
+                    float starSize = (i % 4 == 0) ? 3.0f : ((i % 3 == 0) ? 2.0f : 1.2f);
+                    Color starColor = (i % 5 == 0) ? YELLOW : ((i % 7 == 0) ? SKYBLUE : WHITE);
+                    DrawCircle(stars[i].x, stars[i].y, starSize, ColorAlpha(starColor, 0.7f + 0.3f * sinf(GetTime() * 2 + i)));
+                }
                 
-                // Draw difficulty options
-                DrawText("1 - EASY", SCREEN_WIDTH / 2 - MeasureText("1 - EASY", 40) / 2, SCREEN_HEIGHT / 2 - 100, 40, GREEN);
-                DrawText("2 - MEDIUM", SCREEN_WIDTH / 2 - MeasureText("2 - MEDIUM", 40) / 2, SCREEN_HEIGHT / 2 - 30, 40, YELLOW);
-                DrawText("3 - HARD", SCREEN_WIDTH / 2 - MeasureText("3 - HARD", 40) / 2, SCREEN_HEIGHT / 2 + 40, 40, ORANGE);
-                DrawText("4 - IMPOSSIBLE", SCREEN_WIDTH / 2 - MeasureText("4 - IMPOSSIBLE", 40) / 2, SCREEN_HEIGHT / 2 + 110, 40, RED);
+                // Semi-transparent overlay gradient for better readability
+                DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
+                                     ColorAlpha(BLACK, 0.8f), ColorAlpha(DARKBLUE, 0.5f));
                 
-                DrawText("Press number to select difficulty and start", SCREEN_WIDTH / 2 - MeasureText("Press number to select difficulty and start", 20) / 2, SCREEN_HEIGHT * 3 / 4 + 30, 20, WHITE);
-                DrawText("Press BACKSPACE to return to main menu", SCREEN_WIDTH / 2 - MeasureText("Press BACKSPACE to return to main menu", 20) / 2, SCREEN_HEIGHT * 3 / 4 + 60, 20, LIGHTGRAY);
-                break;
+                // Draw animated title with retro style
+                const char* title = "SELECT DIFFICULTY";
+                int titleSize = 65;
+                float bounceHeight = 3.0f * sinf(GetTime() * 2.5f); // Subtle bounce effect
+                int titleWidth = MeasureText(title, titleSize);
+                
+                // Draw shadow for depth
+                DrawText(title, SCREEN_WIDTH/2 - titleWidth/2 - 3, 90 + 3, titleSize, BLACK);
+                
+                // Main title with color animation
+                Color titleColor = ColorFromHSV(fmodf(GetTime() * 20, 360.0f), 0.7f, 1.0f); // Slow color cycle
+                DrawText(title, SCREEN_WIDTH/2 - titleWidth/2, 90 + bounceHeight, titleSize, titleColor);
+
+                // Dynamic underline
+                DrawLineEx(
+                    (Vector2){SCREEN_WIDTH/2 - 280, 160},
+                    (Vector2){SCREEN_WIDTH/2 + 280, 160},
+                    3.0f, WHITE);
+                  // Define difficulty option buttons with better spacing
+                float buttonSpacing = 100;
+                // Keep these button definitions identical to those in the update section for consistent click detection
+                Rectangle easyButton = { SCREEN_WIDTH/2 - 200, 180, 400, 75 };
+                Rectangle mediumButton = { SCREEN_WIDTH/2 - 200, 180 + buttonSpacing, 400, 75 };
+                Rectangle hardButton = { SCREEN_WIDTH/2 - 200, 180 + buttonSpacing*2, 400, 75 };
+                Rectangle impossibleButton = { SCREEN_WIDTH/2 - 200, 180 + buttonSpacing*3, 400, 75 };
+                  Vector2 mousePos = GetMousePosition();
+                bool easyHover = CheckCollisionPointRec(mousePos, easyButton);
+                bool mediumHover = CheckCollisionPointRec(mousePos, mediumButton);
+                bool hardHover = CheckCollisionPointRec(mousePos, hardButton);
+                bool impossibleHover = CheckCollisionPointRec(mousePos, impossibleButton);
+                
+                // Add visual feedback for mouse clicks
+                bool isMousePressed = IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+                bool easyPressed = easyHover && isMousePressed;
+                bool mediumPressed = mediumHover && isMousePressed;
+                bool hardPressed = hardHover && isMousePressed;
+                bool impossiblePressed = impossibleHover && isMousePressed;
+                  // Draw difficulty buttons with retro arcade style and proper click feedback
+                // 1. Easy Button - green gradient
+                if (easyPressed) {
+                    // Pressed effect - darker and slight offset
+                    DrawRectangleGradientH(easyButton.x + 2, easyButton.y + 2, easyButton.width - 4, easyButton.height - 4, 
+                                        DARKGREEN, GREEN);
+                    DrawRectangleLines(easyButton.x + 2, easyButton.y + 2, easyButton.width - 4, easyButton.height - 4, WHITE);
+                    DrawText("1 - EASY", easyButton.x + 22, easyButton.y + easyButton.height/2 - 13, 36, WHITE);
+                } else {
+                    DrawRectangleGradientH(easyButton.x, easyButton.y, easyButton.width, easyButton.height, 
+                                        easyHover ? LIME : GREEN, easyHover ? GREEN : DARKGREEN);
+                    DrawRectangleLines(easyButton.x, easyButton.y, easyButton.width, easyButton.height, WHITE);
+                    DrawText("1 - EASY", easyButton.x + 20, easyButton.y + easyButton.height/2 - 15, 36, WHITE);
+                }
+                DrawCircle(easyButton.x + 380, easyButton.y + easyButton.height/2, 5, 
+                          ColorAlpha(WHITE, 0.5f + 0.5f * sinf(GetTime() * 3))); // Indicator light
+                  // 2. Medium Button - yellow/gold gradient with click feedback
+                if (mediumPressed) {
+                    // Pressed effect - darker and slight offset
+                    DrawRectangleGradientH(mediumButton.x + 2, mediumButton.y + 2, mediumButton.width - 4, mediumButton.height - 4, 
+                                        GOLD, ORANGE);
+                    DrawRectangleLines(mediumButton.x + 2, mediumButton.y + 2, mediumButton.width - 4, mediumButton.height - 4, WHITE);
+                    DrawText("2 - MEDIUM", mediumButton.x + 22, mediumButton.y + mediumButton.height/2 - 13, 36, BLACK);
+                } else {
+                    DrawRectangleGradientH(mediumButton.x, mediumButton.y, mediumButton.width, mediumButton.height, 
+                                        mediumHover ? GOLD : YELLOW, mediumHover ? ORANGE : GOLD);
+                    DrawRectangleLines(mediumButton.x, mediumButton.y, mediumButton.width, mediumButton.height, WHITE);
+                    DrawText("2 - MEDIUM", mediumButton.x + 20, mediumButton.y + mediumButton.height/2 - 15, 36, BLACK);
+                }
+                DrawCircle(mediumButton.x + 380, mediumButton.y + mediumButton.height/2, 5, 
+                          ColorAlpha(WHITE, 0.5f + 0.5f * sinf(GetTime() * 3 + 1))); // Indicator light
+                  // 3. Hard Button - orange gradient with click feedback
+                if (hardPressed) {
+                    // Pressed effect - darker and slight offset
+                    DrawRectangleGradientH(hardButton.x + 2, hardButton.y + 2, hardButton.width - 4, hardButton.height - 4, 
+                                        ORANGE, (Color){200, 80, 0, 255});
+                    DrawRectangleLines(hardButton.x + 2, hardButton.y + 2, hardButton.width - 4, hardButton.height - 4, WHITE);
+                    DrawText("3 - HARD", hardButton.x + 22, hardButton.y + hardButton.height/2 - 13, 36, WHITE);
+                } else {
+                    DrawRectangleGradientH(hardButton.x, hardButton.y, hardButton.width, hardButton.height, 
+                                        hardHover ? (Color){255, 180, 50, 255} : ORANGE, 
+                                        hardHover ? RED : (Color){200, 80, 0, 255});
+                    DrawRectangleLines(hardButton.x, hardButton.y, hardButton.width, hardButton.height, WHITE);
+                    DrawText("3 - HARD", hardButton.x + 20, hardButton.y + hardButton.height/2 - 15, 36, WHITE);
+                }
+                DrawCircle(hardButton.x + 380, hardButton.y + hardButton.height/2, 5, 
+                          ColorAlpha(WHITE, 0.5f + 0.5f * sinf(GetTime() * 3 + 2))); // Indicator light
+                  // 4. Impossible Button - red gradient with warning effect and click feedback
+                float warningPulse = impossibleHover ? (0.8f + 0.2f * sinf(GetTime() * 8)) : 1.0f;
+                
+                if (impossiblePressed) {
+                    // Pressed effect - darker and slight offset with intense pulsing
+                    DrawRectangleGradientH(impossibleButton.x + 2, impossibleButton.y + 2, impossibleButton.width - 4, impossibleButton.height - 4, 
+                                        ColorAlpha(MAROON, warningPulse), 
+                                        ColorAlpha((Color){100, 0, 0, 255}, warningPulse));
+                    DrawRectangleLines(impossibleButton.x + 2, impossibleButton.y + 2, impossibleButton.width - 4, impossibleButton.height - 4, WHITE);
+                    DrawText("4 - IMPOSSIBLE", impossibleButton.x + 22, impossibleButton.y + impossibleButton.height/2 - 13, 36, WHITE);
+                } else {
+                    DrawRectangleGradientH(impossibleButton.x, impossibleButton.y, impossibleButton.width, impossibleButton.height, 
+                                        ColorAlpha(RED, warningPulse), 
+                                        ColorAlpha(MAROON, warningPulse));
+                    DrawRectangleLines(impossibleButton.x, impossibleButton.y, impossibleButton.width, impossibleButton.height, WHITE);
+                    DrawText("4 - IMPOSSIBLE", impossibleButton.x + 20, impossibleButton.y + impossibleButton.height/2 - 15, 36, WHITE);
+                }
+                DrawCircle(impossibleButton.x + 380, impossibleButton.y + impossibleButton.height/2, 5, 
+                          ColorAlpha(WHITE, 0.5f + 0.5f * sinf(GetTime() * 10))); // Fast pulsing indicator
+                  // Better navigation info with animated effects
+                float alpha1 = 0.7f + 0.3f * sinf(GetTime() * 3);
+                DrawText("PRESS NUMBER KEY OR CLICK TO SELECT DIFFICULTY", 
+                    SCREEN_WIDTH/2 - MeasureText("PRESS NUMBER KEY OR CLICK TO SELECT DIFFICULTY", 20)/2, 
+                    585, 
+                    20, ColorAlpha(WHITE, alpha1));
+                
+                float alpha2 = 0.6f + 0.4f * sinf(GetTime() * 2);    
+                DrawText("PRESS BACKSPACE TO RETURN", 
+                    SCREEN_WIDTH/2 - MeasureText("PRESS BACKSPACE TO RETURN", 20)/2, 
+                    615, 
+                    20, ColorAlpha(LIGHTGRAY, alpha2));
+                    
+                // Add some floating particles for effect
+                for (int i = 0; i < 5; i++) {
+                    float y = fmodf(GetTime() * (50 + i * 10) + i * 120, SCREEN_HEIGHT);
+                    float x = SCREEN_WIDTH/2 + 250 * sinf(GetTime() * 0.5f + i);
+                    DrawCircle(x, y, 2, ColorAlpha(WHITE, 0.5f));
+                }
+            }
+            break;
                 
             case GAMEPLAY:
             case PAUSED: {
@@ -651,83 +924,337 @@ void UpdateDrawFrame(void)
                 // State-specific drawing
                 if (currentState == GAMEPLAY) {
                     DrawText("SPACE for Pause", SCREEN_WIDTH - MeasureText("SPACE for Pause", 20) - 20, 10, 20, LIGHTGRAY);
-                    DrawText("M for Main Menu", SCREEN_WIDTH - MeasureText("M for Main Menu", 20) - 20, 35, 20, LIGHTGRAY);
-                } else if (currentState == PAUSED) {
-                    DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, ColorAlpha(BLACK, 0.8f));
-                    DrawText("PAUSED", SCREEN_WIDTH / 2 - MeasureText("PAUSED", 60) / 2, SCREEN_HEIGHT / 3, 60, WHITE);
+                    DrawText("M for Main Menu", SCREEN_WIDTH - MeasureText("M for Main Menu", 20) - 20, 35, 20, LIGHTGRAY);                } else if (currentState == PAUSED) {
+                    // Semi-transparent overlay with radial gradient for dramatic pause effect
+                    DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
+                                         ColorAlpha(BLACK, 0.85f), ColorAlpha(DARKBLUE, 0.7f));
                     
-                    // Define button rectangles
-                    Rectangle resumeButton = { SCREEN_WIDTH / 2 - 125, SCREEN_HEIGHT / 2 - 50, 250, 50 };
-                    Rectangle menuButton = { SCREEN_WIDTH / 2 - 125, SCREEN_HEIGHT / 2 + 20, 250, 50 };
-
-                    // --- Draw Resume Button ---
-                    bool resumeHover = CheckCollisionPointRec(GetMousePosition(), resumeButton);
-                    DrawRectangleRec(resumeButton, resumeHover ? GOLD : ORANGE);
-                    DrawText("RESUME", resumeButton.x + resumeButton.width / 2 - MeasureText("RESUME", 30) / 2, resumeButton.y + 10, 30, DARKGRAY);
+                    // Create a glowing pause symbol
+                    float glowIntensity = 0.6f + 0.4f * sinf(GetTime() * 3.0f);
+                    float pauseWidth = 30;
+                    float pauseHeight = 100;
+                    float pauseSpacing = 40;
+                    float pauseY = 180;
+                    float pauseX = SCREEN_WIDTH/2 - pauseSpacing/2 - pauseWidth;
                     
-                    // --- Draw Menu Button ---
-                    bool menuHover = CheckCollisionPointRec(GetMousePosition(), menuButton);
-                    DrawRectangleRec(menuButton, menuHover ? GOLD : ORANGE);
-                    DrawText("MAIN MENU", menuButton.x + menuButton.width / 2 - MeasureText("MAIN MENU", 30) / 2, menuButton.y + 10, 30, DARKGRAY);
-                }
+                    Color pauseGlow = ColorAlpha(WHITE, glowIntensity);
+                    DrawRectangleRounded((Rectangle){pauseX, pauseY, pauseWidth, pauseHeight}, 0.3f, 8, pauseGlow);
+                    DrawRectangleRounded((Rectangle){pauseX + pauseWidth + pauseSpacing, pauseY, pauseWidth, pauseHeight}, 0.3f, 8, pauseGlow);
+                    
+                    // Draw animated "PAUSED" text
+                    Color pauseTextColor = ColorFromHSV(fmodf(GetTime() * 15, 360.0f), 0.7f, 1.0f);
+                    DrawText("PAUSED", SCREEN_WIDTH/2 - MeasureText("PAUSED", 80)/2, 300, 80, pauseTextColor);
+                    
+                    // Define button rectangles with better design
+                    Rectangle resumeButton = { SCREEN_WIDTH/2 - 170, 410, 340, 65 };
+                    Rectangle menuButton = { SCREEN_WIDTH/2 - 170, 495, 340, 65 };
+                      // Get mouse position for hover effects
+                    Vector2 mousePos = GetMousePosition();
+                    bool resumeHover = CheckCollisionPointRec(mousePos, resumeButton);
+                    bool menuHover = CheckCollisionPointRec(mousePos, menuButton);
+                    
+                    // Visual state based on mouse interaction
+                    bool resumePressed = resumeHover && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+                    bool menuPressed = menuHover && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
+                    
+                    // Add click handling directly in the drawing phase as well for redundancy
+                    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+                        if (resumeHover) currentState = GAMEPLAY;
+                        if (menuHover) currentState = MAIN_MENU;
+                    }
+                    
+                    // --- Draw Resume Button with arcade style ---
+                    Color resumeGradStart, resumeGradEnd;
+                    if (resumePressed) {
+                        resumeGradStart = (Color){20, 160, 20, 255};
+                        resumeGradEnd = (Color){10, 100, 10, 255};
+                    } else if (resumeHover) {
+                        resumeGradStart = (Color){30, 220, 30, 255};
+                        resumeGradEnd = (Color){0, 180, 0, 255};
+                    } else {
+                        resumeGradStart = (Color){20, 200, 20, 255};
+                        resumeGradEnd = (Color){0, 140, 0, 255};
+                    }
+                    
+                    DrawRectangleGradientH(resumeButton.x, resumeButton.y, resumeButton.width, resumeButton.height, 
+                                         resumeGradStart, resumeGradEnd);
+                    DrawRectangleLines(resumeButton.x, resumeButton.y, resumeButton.width, resumeButton.height, WHITE);
+                    
+                    // Play symbol inside resume button
+                    DrawTriangle(
+                        (Vector2){resumeButton.x + 30, resumeButton.y + resumeButton.height/2 - 15},
+                        (Vector2){resumeButton.x + 30, resumeButton.y + resumeButton.height/2 + 15},
+                        (Vector2){resumeButton.x + 60, resumeButton.y + resumeButton.height/2},
+                        WHITE);
+                    
+                    // Draw button text with better style
+                    DrawText("RESUME GAME", 
+                        resumeButton.x + 75, 
+                        resumeButton.y + resumeButton.height/2 - 15, 
+                        30, WHITE);
+                    
+                    // --- Draw Main Menu Button with arcade style ---
+                    Color menuGradStart, menuGradEnd;
+                    if (menuPressed) {
+                        menuGradStart = (Color){160, 20, 20, 255};
+                        menuGradEnd = (Color){100, 10, 10, 255};
+                    } else if (menuHover) {
+                        menuGradStart = (Color){220, 30, 30, 255};
+                        menuGradEnd = (Color){180, 0, 0, 255};
+                    } else {
+                        menuGradStart = (Color){200, 20, 20, 255};
+                        menuGradEnd = (Color){140, 0, 0, 255};
+                    }
+                    
+                    DrawRectangleGradientH(menuButton.x, menuButton.y, menuButton.width, menuButton.height, 
+                                         menuGradStart, menuGradEnd);
+                    DrawRectangleLines(menuButton.x, menuButton.y, menuButton.width, menuButton.height, WHITE);
+                    
+                    // Home symbol inside menu button
+                    DrawRectangle(menuButton.x + 30, menuButton.y + resumeButton.height/2 - 8, 30, 17, WHITE);
+                    DrawTriangle(
+                        (Vector2){menuButton.x + 20, menuButton.y + resumeButton.height/2},
+                        (Vector2){menuButton.x + 45, menuButton.y + resumeButton.height/2 - 20},
+                        (Vector2){menuButton.x + 70, menuButton.y + resumeButton.height/2},
+                        WHITE);
+                    
+                    // Draw button text with better style
+                    DrawText("MAIN MENU", 
+                        menuButton.x + 75, 
+                        menuButton.y + menuButton.height/2 - 15, 
+                        30, WHITE);
+                    
+                    // Animated keyboard controls reminder
+                    float alpha = 0.6f + 0.4f * sinf(GetTime() * 4.0f);
+                    DrawText("Press SPACE to resume", 
+                        SCREEN_WIDTH/2 - MeasureText("Press SPACE to resume", 22)/2, 
+                        590, 
+                        22, ColorAlpha(WHITE, alpha));}
             }
-                break;
-                
-            case GAME_OVER:
-            {
-                // Draw game over screen
-                DrawText("GAME OVER", SCREEN_WIDTH / 2 - MeasureText("GAME OVER", 60) / 2, SCREEN_HEIGHT / 4, 60, RED);
-                
-                if (playerScore > computerScore) {
-                    DrawText(TextFormat("%s WINS!", playerName), SCREEN_WIDTH / 2 - MeasureText(TextFormat("%s WINS!", playerName), 50) / 2, SCREEN_HEIGHT / 2 - 20, 50, GREEN);
-                } else {
-                    DrawText("COMPUTER WINS!", SCREEN_WIDTH / 2 - MeasureText("COMPUTER WINS!", 50) / 2, SCREEN_HEIGHT / 2 - 20, 50, RED);
+            break;            case GAME_OVER: {
+                // Background effect: animated stars with color variations
+                for (int i = 0; i < numStars; i++) {
+                    float starSize = (i % 4 == 0) ? 3.0f : ((i % 3 == 0) ? 2.0f : 1.2f);
+                    Color starColor = (i % 5 == 0) ? YELLOW : ((i % 7 == 0) ? SKYBLUE : WHITE);
+                    DrawCircle(stars[i].x, stars[i].y, starSize, ColorAlpha(starColor, 0.7f + 0.3f * sinf(GetTime() * 2 + i)));
+                }
+                  
+                // Create a dynamic game over screen with gradient background
+                DrawRectangleGradientV(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 
+                                    ColorAlpha(BLACK, 0.8f), ColorAlpha(DARKBLUE, 0.5f));
+                  
+                // Animated scanlines effect for retro feel
+                for (int i = 0; i < SCREEN_HEIGHT; i += 4) {
+                    DrawRectangle(0, i, SCREEN_WIDTH, 1, ColorAlpha(BLACK, 0.15f));
                 }
                 
-                // Show difficulty level
+                // Game over title with pixel-like animated effects
+                const char* gameOverText = "GAME OVER";
+                float bounceHeight = 5.0f * sinf(GetTime() * 2.5f);
+                Color titleGlow = ColorFromHSV(fmodf(GetTime() * 30, 360.0f), 0.8f, 1.0f);
+                
+                // Draw shadow for depth
+                DrawText(gameOverText, 
+                    SCREEN_WIDTH/2 - MeasureText(gameOverText, 80)/2 + 3, 
+                    120 + 3, 
+                    80, BLACK);
+                
+                // Main pulsing title
+                DrawText(gameOverText, 
+                    SCREEN_WIDTH/2 - MeasureText(gameOverText, 80)/2, 
+                    120 + bounceHeight, 
+                    80, titleGlow);
+                
+                // Winner announcement with animated effects
+                if (playerScore > computerScore) {
+                    // Player wins with celebration effects
+                    const char* winText = TextFormat("%s WINS!", playerName);
+                    
+                    // Victory glow effect
+                    float glowSize = 4.0f + 2.0f * sinf(GetTime() * 5.0f);
+                    for (float i = glowSize; i > 0; i -= 1.0f) {
+                        DrawText(winText, 
+                            SCREEN_WIDTH/2 - MeasureText(winText, 60)/2, 
+                            220, 
+                            60, ColorAlpha(GREEN, 0.1f * i));
+                    }
+                    
+                    DrawText(winText, 
+                        SCREEN_WIDTH/2 - MeasureText(winText, 60)/2, 
+                        220, 
+                        60, GREEN);
+                } else {
+                    // Computer wins with intimidating effects
+                    const char* loseText = "COMPUTER WINS!";
+                    
+                    // Danger/defeat effect
+                    float glowSize = 3.0f + 2.0f * sinf(GetTime() * 8.0f);
+                    for (float i = glowSize; i > 0; i -= 1.0f) {
+                        DrawText(loseText, 
+                            SCREEN_WIDTH/2 - MeasureText(loseText, 60)/2, 
+                            220, 
+                            60, ColorAlpha(RED, 0.15f * i));
+                    }
+                    
+                    DrawText(loseText, 
+                        SCREEN_WIDTH/2 - MeasureText(loseText, 60)/2, 
+                        220, 
+                        60, RED);
+                }                // Retro-style arcade score display
+                Rectangle scoreBox = { SCREEN_WIDTH/2 - 220, 310, 440, 130 };
+                
+                // Arcade-style score display with glowing borders
+                DrawRectangleGradientV(scoreBox.x, scoreBox.y, scoreBox.width, scoreBox.height, 
+                                     ColorAlpha(DARKBLUE, 0.7f), ColorAlpha(DARKPURPLE, 0.7f));
+                
+                // Animated border
+                float borderGlow = 0.7f + 0.3f * sinf(GetTime() * 3.0f);
+                Color borderColor = playerScore > computerScore ? 
+                                  ColorAlpha(GREEN, borderGlow) : 
+                                  ColorAlpha(RED, borderGlow);
+                                  
+                DrawRectangleLines(scoreBox.x, scoreBox.y, scoreBox.width, scoreBox.height, borderColor);
+                
+                // Draw digital-style separating line
+                DrawLineEx(
+                    (Vector2){scoreBox.x + 30, scoreBox.y + 65},
+                    (Vector2){scoreBox.x + scoreBox.width - 30, scoreBox.y + 65},
+                    2, ColorAlpha(LIGHTGRAY, 0.8f));
+                
+                // Show player name and score with arcade style
+                DrawText(TextFormat("%s", playerName), 
+                    scoreBox.x + 30, 
+                    scoreBox.y + 20, 
+                    30, WHITE);
+                
+                // Create a digital score display effect
+                Color scoreColor = playerScore > computerScore ? GREEN : WHITE;
+                DrawText(TextFormat("%d", playerScore), 
+                    scoreBox.x + scoreBox.width - 90, 
+                    scoreBox.y + 15, 
+                    45, scoreColor);
+                
+                // Computer score display
+                DrawText("COMPUTER", 
+                    scoreBox.x + 30, 
+                    scoreBox.y + 75, 
+                    30, RED);
+                    
+                // Computer score with digital effect
+                Color compScoreColor = computerScore > playerScore ? RED : WHITE;
+                DrawText(TextFormat("%d", computerScore), 
+                    scoreBox.x + scoreBox.width - 90, 
+                    scoreBox.y + 75, 
+                    45, compScoreColor);
+                  // Arcade-style buttons for options
+                Rectangle replayButton = { SCREEN_WIDTH/2 - 210, 465, 200, 55 };
+                Rectangle diffButton = { SCREEN_WIDTH/2 + 10, 465, 200, 55 };
+                
+                Vector2 mousePos = GetMousePosition();
+                bool replayHover = CheckCollisionPointRec(mousePos, replayButton);
+                bool diffHover = CheckCollisionPointRec(mousePos, diffButton);
+                
+                // Draw "Play Again" button with retro style and hover effects
+                DrawRectangleGradientH(replayButton.x, replayButton.y, replayButton.width, replayButton.height,
+                                     ColorAlpha(replayHover ? LIME : GREEN, 0.9f),
+                                     ColorAlpha(replayHover ? GREEN : DARKGREEN, 0.9f));
+                DrawRectangleLines(replayButton.x, replayButton.y, replayButton.width, replayButton.height, WHITE);
+                
+                float replayScale = replayHover ? 1.05f : 1.0f;
+                DrawText("PLAY AGAIN", 
+                    replayButton.x + replayButton.width/2 - MeasureText("PLAY AGAIN", 22 * replayScale)/2, 
+                    replayButton.y + replayButton.height/2 - 11 * replayScale, 
+                    22 * replayScale, WHITE);
+                
+                // Draw key hint with animation
+                float hintAlpha = 0.6f + 0.4f * sinf(GetTime() * 3.0f);
+                DrawText("(R)", 
+                    replayButton.x + replayButton.width/2 - MeasureText("(R)", 16)/2,
+                    replayButton.y + 38,
+                    16, ColorAlpha(WHITE, hintAlpha));
+                
+                // Draw "Change Difficulty" button
+                DrawRectangleGradientH(diffButton.x, diffButton.y, diffButton.width, diffButton.height,                                     ColorAlpha(diffHover ? GOLD : ORANGE, 0.9f),
+                                     ColorAlpha(diffHover ? ORANGE : (Color){180, 80, 0, 255}, 0.9f));
+                DrawRectangleLines(diffButton.x, diffButton.y, diffButton.width, diffButton.height, WHITE);
+                
+                float diffScale = diffHover ? 1.05f : 1.0f;
+                DrawText("DIFFICULTY", 
+                    diffButton.x + diffButton.width/2 - MeasureText("DIFFICULTY", 22 * diffScale)/2, 
+                    diffButton.y + diffButton.height/2 - 11 * diffScale, 
+                    22 * diffScale, BLACK);
+                
+                // Draw key hint with animation
+                DrawText("(SPACE)", 
+                    diffButton.x + diffButton.width/2 - MeasureText("(SPACE)", 16)/2,
+                    diffButton.y + 38,
+                    16, ColorAlpha(BLACK, hintAlpha));
+                  // Difficulty info with arcade cabinet style
                 const char* gameOverDiffText = "";
                 Color gameOverDiffColor;
                 
                 switch(currentDifficulty) {
                     case EASY:
-                        gameOverDiffText = "EASY";
+                        gameOverDiffText = "EASY MODE";
                         gameOverDiffColor = GREEN;
                         break;
                     case MEDIUM:
-                        gameOverDiffText = "MEDIUM";
+                        gameOverDiffText = "MEDIUM MODE";
                         gameOverDiffColor = YELLOW;
                         break;
                     case HARD:
-                        gameOverDiffText = "HARD";
+                        gameOverDiffText = "HARD MODE";
                         gameOverDiffColor = ORANGE;
                         break;
                     case IMPOSSIBLE:
-                        gameOverDiffText = "IMPOSSIBLE";
+                        gameOverDiffText = "IMPOSSIBLE MODE";
                         gameOverDiffColor = RED;
                         break;
                 }
                 
-                DrawText(TextFormat("Player: %s", playerName), 
-                    SCREEN_WIDTH / 2 - MeasureText(TextFormat("Player: %s", playerName), 20) / 2, 
-                    SCREEN_HEIGHT / 2 + 40, 20, WHITE);
-
-                DrawText(TextFormat("Difficulty: %s", gameOverDiffText),
-                    SCREEN_WIDTH / 2 - MeasureText(TextFormat("Difficulty: %s", gameOverDiffText), 20) / 2, 
-                    SCREEN_HEIGHT / 2 + 70, 20, gameOverDiffColor);
+                // Show difficulty in a retro arcade style box
+                Rectangle diffBox = { SCREEN_WIDTH / 2 - 170, 540, 340, 50 };                // Create a glowing arcade cabinet style difficulty display
+                float glowIntensity = 0.7f + 0.3f * sinf(GetTime() * 2.0f);
+                DrawRectangleGradientH(diffBox.x, diffBox.y, diffBox.width, diffBox.height, 
+                                     ColorAlpha(BLACK, 0.7f), ColorAlpha(DARKBLUE, 0.7f));
+                DrawRectangleLines(diffBox.x, diffBox.y, diffBox.width, diffBox.height, ColorAlpha(gameOverDiffColor, glowIntensity));
                 
-                DrawText(TextFormat("Final Score: %d - %d", playerScore, computerScore), 
-                    SCREEN_WIDTH / 2 - MeasureText(TextFormat("Final Score: %d - %d", playerScore, computerScore), 30) / 2, 
-                    SCREEN_HEIGHT / 2 + 100, 30, WHITE);
+                // Pixelated decoration at edges
+                for (int i = 0; i < 6; i++) {
+                    DrawRectangle(diffBox.x + 10 + (i * 10), diffBox.y - 5, 5, 5, 
+                                ColorAlpha(gameOverDiffColor, 0.7f));
+                    DrawRectangle(diffBox.x + diffBox.width - 60 + (i * 10), diffBox.y - 5, 5, 5, 
+                                ColorAlpha(gameOverDiffColor, 0.7f));
+                }
+                
+                // Draw difficulty text with shadow for depth
+                DrawText(gameOverDiffText,
+                    diffBox.x + diffBox.width/2 - MeasureText(gameOverDiffText, 28) / 2 + 2, 
+                    diffBox.y + 11 + 2, 
+                    28, BLACK);
                     
-                DrawText("Press R to play again with same difficulty", 
-                    SCREEN_WIDTH / 2 - MeasureText("Press R to play again with same difficulty", 20) / 2, 
-                    SCREEN_HEIGHT * 3 / 4 + 40, 20, WHITE);
-                    
-                DrawText("Press SPACE for difficulty selection", 
-                    SCREEN_WIDTH / 2 - MeasureText("Press SPACE for difficulty selection", 20) / 2, 
-                    SCREEN_HEIGHT * 3 / 4 + 70, 20, LIGHTGRAY);
+                DrawText(gameOverDiffText,
+                    diffBox.x + diffBox.width/2 - MeasureText(gameOverDiffText, 28) / 2, 
+                    diffBox.y + 11, 
+                    28, gameOverDiffColor);
+                  // Credits with classic arcade style
+                float creditsAlpha = 0.7f + 0.3f * sinf(GetTime() * 1.5f);
+                DrawText("THANKS FOR PLAYING!",
+                    SCREEN_WIDTH/2 - MeasureText("THANKS FOR PLAYING!", 24) / 2,
+                    610, 
+                    24, ColorAlpha(WHITE, creditsAlpha));
+                  // Handle mouse clicks for buttons
+                if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+                    if (replayHover) {
+                        currentState = GAMEPLAY;
+                        ResetBall(0);
+                        playerScore = 0; computerScore = 0;
+                    } else if (diffHover) {
+                        currentState = DIFFICULTY_SELECT;
+                    }
+                }
             }
-                break;
+            break;
         }
         
         EndMode2D();
