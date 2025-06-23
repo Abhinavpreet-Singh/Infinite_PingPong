@@ -137,7 +137,8 @@ int main() {
     ResetBall(0); // Set initial ball state
 
 #if defined(PLATFORM_WEB)
-    emscripten_set_main_loop(UpdateDrawFrame, 0, 1);
+    SetTargetFPS(144);  // Explicitly set 144 FPS for web version
+    emscripten_set_main_loop(UpdateDrawFrame, 144, 1);
 #else
     SetTargetFPS(144);
     // Main game loop
