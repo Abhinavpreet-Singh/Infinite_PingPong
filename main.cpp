@@ -33,6 +33,7 @@ struct Ball {
 enum GameState {
     MAIN_MENU,
     DIFFICULTY_SELECT,
+    READY_TO_START,
     GAMEPLAY,
     PAUSED,
     GAME_OVER
@@ -240,37 +241,43 @@ void UpdateDrawFrame(void)
             if (IsKeyPressed(KEY_ONE) || IsKeyPressed(KEY_KP_1) || 
                 (mouseAction && CheckCollisionPointRec(mousePos, easyButton))) {
                 currentDifficulty = EASY;
-                computerPaddle.speed = 8.5f;  // Adjusted for better game feel
-                currentState = GAMEPLAY;
+                computerPaddle.speed = 8.5f;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
+                currentState = READY_TO_START;
             }            // Check both keyboard and mouse selection for Medium difficulty
             else if (IsKeyPressed(KEY_TWO) || IsKeyPressed(KEY_KP_2) || 
                      (mouseAction && CheckCollisionPointRec(mousePos, mediumButton))) {
                 currentDifficulty = MEDIUM;
-                computerPaddle.speed = 12.0f;  // Adjusted for proper medium challenge
-                currentState = GAMEPLAY;
+                computerPaddle.speed = 12.0f;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
+                currentState = READY_TO_START;
             }            // Check both keyboard and mouse selection for Hard difficulty
             else if (IsKeyPressed(KEY_THREE) || IsKeyPressed(KEY_KP_3) || 
                      (mouseAction && CheckCollisionPointRec(mousePos, hardButton))) {
                 currentDifficulty = HARD;
-                computerPaddle.speed = 15.0f;  // Significantly increased for a proper Hard challenge
-                currentState = GAMEPLAY;
+                computerPaddle.speed = 15.0f;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
+                currentState = READY_TO_START;
             }            // Check both keyboard and mouse selection for Impossible difficulty
             else if (IsKeyPressed(KEY_FOUR) || IsKeyPressed(KEY_KP_4) || 
                      (mouseAction && CheckCollisionPointRec(mousePos, impossibleButton))) {
                 currentDifficulty = IMPOSSIBLE;
-                computerPaddle.speed = 24.0f;  // Drastically increased for a truly impossible challenge
-                currentState = GAMEPLAY;
+                computerPaddle.speed = 24.0f;
                 ResetBall(0);
                 playerScore = 0; computerScore = 0;
+                currentState = READY_TO_START;
             }
             else if (IsKeyPressed(KEY_BACKSPACE)) {
                 currentState = MAIN_MENU;
+            }
+            break;
+        }
+        case READY_TO_START: {
+            if (IsKeyPressed(KEY_SPACE)) {
+                currentState = GAMEPLAY;
             }
             break;
         }
@@ -875,6 +882,33 @@ void UpdateDrawFrame(void)
                     float x = SCREEN_WIDTH/2 + 250 * sinf(GetTime() * 0.5f + i);
                     DrawCircle(x, y, 2, ColorAlpha(WHITE, 0.5f));
                 }
+            }
+            break;
+                
+            case READY_TO_START: {
+                // Draw background and court as in gameplay
+                DrawRectangleRounded((Rectangle){playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height}, 0.8f, 10, playerPaddle.color);
+                DrawRectangleRounded((Rectangle){computerPaddle.x, computerPaddle.y, computerPaddle.width, computerPaddle.height}, 0.8f, 10, computerPaddle.color);
+                DrawCircleGradient(ball.x, ball.y, ball.radius+4, ColorAlpha(WHITE, 0.3f), ColorAlpha(WHITE, 0.0f));
+                DrawCircle(ball.x, ball.y, ball.radius, ball.color);
+                // Draw Player Name and Score
+                DrawText(playerName, COURT_X + COURT_WIDTH/4 - MeasureText(playerName, 20)/2, COURT_Y + 5, 20, WHITE);
+                DrawText(TextFormat("%d", playerScore), COURT_X + COURT_WIDTH/4 - 15, COURT_Y + 30, 60, WHITE);
+                DrawText("COMPUTER", COURT_X + COURT_WIDTH*3/4 - MeasureText("COMPUTER", 20)/2, COURT_Y + 5, 20, RED);
+                DrawText(TextFormat("%d", computerScore), COURT_X + COURT_WIDTH*3/4 - 15, COURT_Y + 30, 60, RED);
+                // Show difficulty
+                const char* difficultyText = "";
+                Color difficultyColor = WHITE;
+                switch(currentDifficulty) {
+                    case EASY: difficultyText = "EASY"; difficultyColor = GREEN; break;
+                    case MEDIUM: difficultyText = "MEDIUM"; difficultyColor = YELLOW; break;
+                    case HARD: difficultyText = "HARD"; difficultyColor = ORANGE; break;
+                    case IMPOSSIBLE: difficultyText = "IMPOSSIBLE"; difficultyColor = RED; break;
+                }
+                DrawText(difficultyText, SCREEN_WIDTH / 2 - MeasureText(difficultyText, 30) / 2, 10, 30, difficultyColor);
+                // Show 'Press SPACE to start' message
+                float alpha = 0.6f + 0.4f * sinf(GetTime() * 3.0f);
+                DrawText("Press SPACE to start", SCREEN_WIDTH/2 - MeasureText("Press SPACE to start", 40)/2, SCREEN_HEIGHT/2 - 20, 40, ColorAlpha(WHITE, alpha));
             }
             break;
                 
